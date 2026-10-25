@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { registerRepositoryRoutes, RepoError } from "./repository.js";
 
 export function createApp() {
   const app = Fastify({
@@ -24,7 +25,9 @@ export function createApp() {
     }
     if (
       !["GET", "HEAD", "OPTIONS"].includes(request.method) &&
-      request.headers["content-type"]?.toLowerCase() !== "application/json"
+      !/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(
+        request.headers["content-type"] ?? "",
+      )
     ) {
       return reply.code(415).send({
         error: {
@@ -40,6 +43,40 @@ export function createApp() {
     mode: "local" as const,
     version: "0.1.0",
   }));
+
+  registerRepositoryRoutes(app);
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof RepoError)
+      return reply
+        .code(error.status)
+        .send({ error: { code: error.code, message: error.message } });
+    const statusCode =
+      error && typeof error === "object" && "statusCode" in error
+        ? error.statusCode
+        : null;
+    const status = statusCode === 400 || statusCode === 413 ? statusCode : 500;
+    return reply.code(status).send({
+      error: {
+        code:
+          status === 400
+            ? "INVALID_INPUT"
+            : status === 413
+              ? "REQUEST_TOO_LARGE"
+              : "UNAVAILABLE",
+        message:
+          status === 400
+            ? "Invalid request."
+            : status === 413
+              ? "Request is too large."
+              : "Local request unavailable.",
+      },
+    });
+  });
+  app.setNotFoundHandler((_request, reply) =>
+    reply
+      .code(404)
+      .send({ error: { code: "NOT_FOUND", message: "Endpoint not found." } }),
+  );
 
   return app;
 }

@@ -1,4 +1,12 @@
-export function Workspace() {
+import type { Selection } from "./repositoryApi";
+
+export function Workspace({
+  repository,
+  onOpenRepository,
+}: {
+  repository: Selection | null | undefined;
+  onOpenRepository: () => void;
+}) {
   return (
     <>
       <div className="intro">
@@ -9,15 +17,22 @@ export function Workspace() {
           your code connects.
         </h1>
         <p className="intro-copy">
-          A place to trace the structure of a codebase. Begin with a local
-          repository when import becomes available in M1.
+          Browse a local repository to see its real files. Dependency
+          connections and graph views are coming in later milestones.
         </p>
+        <button
+          type="button"
+          className="workspace-link"
+          onClick={onOpenRepository}
+        >
+          {repository ? "View repository files" : "Open a repository"}
+        </button>
       </div>
       <section className="workspace" aria-label="Graph workspace">
         <div className="workspace-toolbar">
           <span>
             Visualization space{" "}
-            <span className="toolbar-caption">/ Awaiting repository</span>
+            <span className="toolbar-caption">/ Graph not built</span>
           </span>
           <div
             className="view-modes"
@@ -37,10 +52,19 @@ export function Workspace() {
           <div className="empty-state">
             <div className="empty-rule" aria-hidden="true" />
             <p className="empty-overline">An open canvas</p>
-            <h2>No repository loaded.</h2>
+            <h2>
+              {repository
+                ? "No graph generated."
+                : repository === undefined
+                  ? "Repository status unknown."
+                  : "No repository loaded."}
+            </h2>
             <p>
-              Nothing to map yet. Repository selection arrives in M1; actual
-              file relationships and graph views follow in later milestones.
+              {repository
+                ? "Files are available in Repository. Dependency analysis arrives in M2 and the 3D graph in M3."
+                : repository === undefined
+                  ? "Check the local API status, then open a repository to explore files."
+                  : "Open a local repository to browse files. Dependency analysis and graph views follow in later milestones."}
             </p>
           </div>
           <div

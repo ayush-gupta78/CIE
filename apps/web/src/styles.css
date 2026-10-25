@@ -422,6 +422,235 @@ h1 {
 .settings-list dd {
   margin: 0;
 }
+.workspace-link,
+.path-controls button,
+.repo-actions button,
+.load-more {
+  min-height: 44px;
+  border: 1px solid var(--cie-accent);
+  background: #29241f;
+  color: var(--cie-text);
+  padding: 10px 16px;
+  cursor: pointer;
+}
+.workspace-link {
+  margin-top: 25px;
+}
+.workspace-link:hover,
+.path-controls button:hover,
+.repo-actions button:hover,
+.load-more:hover {
+  background: #393025;
+}
+.workspace-link:disabled,
+.path-controls button:disabled,
+.repo-actions button:disabled,
+.load-more:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+.repository-page {
+  max-width: 1020px;
+}
+.repository-page h1 {
+  max-width: 800px;
+}
+.repository-form {
+  margin: 38px 0;
+  padding: 26px;
+  border: 1px solid var(--cie-border);
+  background: var(--cie-panel);
+}
+.repository-form label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 14px;
+  color: var(--cie-text);
+}
+.repository-form p,
+.tree-note {
+  color: var(--cie-text-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.path-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+.path-controls input {
+  min-width: 0;
+  flex: 1;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--cie-border);
+  background: var(--cie-stage);
+  color: var(--cie-text);
+  font: 13px var(--cie-font-code);
+}
+.path-controls input:focus-visible {
+  outline: var(--cie-focus);
+  outline-offset: 2px;
+}
+.path-controls button {
+  white-space: nowrap;
+}
+.tree-error {
+  color: var(--cie-danger);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 16px 0;
+}
+.tree-message {
+  color: var(--cie-text-muted);
+  font: italic 14px var(--cie-font-display);
+  padding: 16px;
+}
+.repo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 34px 0 17px;
+}
+.repo-actions > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  max-width: 100%;
+  margin-right: auto;
+  gap: 5px;
+}
+.repo-actions strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 24px var(--cie-font-display);
+}
+.repo-actions span {
+  color: var(--cie-text-muted);
+  font-size: 11px;
+}
+.repo-actions button {
+  padding: 7px 12px;
+  font-size: 12px;
+  border-color: var(--cie-border);
+  background: transparent;
+}
+.tree-panel {
+  border: 1px solid var(--cie-border);
+  background: linear-gradient(135deg, #151315, #0d0c0e);
+  padding: 0 0 15px;
+  min-height: 250px;
+}
+.tree-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 19px 18px;
+  border-bottom: 1px solid var(--cie-border);
+  font: 13px var(--cie-font-display);
+}
+.tree-header span:last-child {
+  color: var(--cie-text-muted);
+  font: 11px var(--cie-font-ui);
+  text-align: right;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding-right: 14px;
+  border: 0;
+  border-bottom: 1px solid #ffffff0a;
+  background: transparent;
+  color: var(--cie-text);
+  text-align: left;
+  cursor: pointer;
+  font: 12px var(--cie-font-code);
+  gap: 10px;
+}
+.tree-row:hover {
+  background: #262124;
+}
+.tree-chevron {
+  color: var(--cie-accent);
+  flex: none;
+  width: 13px;
+  font-size: 16px;
+}
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-kind {
+  flex: none;
+  margin-left: auto;
+  color: var(--cie-text-muted);
+  font: 11px var(--cie-font-ui);
+}
+.tree-children {
+  border-left: 1px solid var(--cie-border);
+  margin-left: 20px;
+}
+.load-more {
+  display: block;
+  margin: 15px auto;
+  border-color: var(--cie-border);
+  font-size: 12px;
+}
+.tree-note {
+  padding: 20px 18px 0;
+  margin-bottom: 0;
+}
+.file-metadata {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+  margin: 20px 0;
+  font-size: 11px;
+}
+.file-metadata dt {
+  color: var(--cie-text-muted);
+}
+.file-metadata dd {
+  margin: 0 0 10px;
+  font: 11px/1.5 var(--cie-font-code);
+  overflow-wrap: anywhere;
+}
+.repository-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .repository-form {
+    padding: 18px;
+  }
+  .path-controls {
+    flex-direction: column;
+  }
+  .repo-actions > div {
+    width: 100%;
+  }
+  .tree-header span:last-child,
+  .tree-kind {
+    display: none;
+  }
+  .tree-row {
+    gap: 6px;
+  }
+}
+@media (max-width: 380px) {
+  .repo-actions button {
+    flex: 1;
+  }
+}
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 175px minmax(0, 1fr) 220px;

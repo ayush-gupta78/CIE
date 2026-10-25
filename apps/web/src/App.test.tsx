@@ -6,10 +6,18 @@ import { App } from "./App";
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ status: "ok", mode: "local", version: "0.1.0" }),
-    }),
+    vi.fn().mockImplementation(async (url: string) =>
+      url === "/api/v1/health"
+        ? {
+            ok: true,
+            json: async () => ({
+              status: "ok",
+              mode: "local",
+              version: "0.1.0",
+            }),
+          }
+        : { ok: true, json: async () => ({ selected: false }) },
+    ),
   );
 });
 afterEach(() => {
@@ -19,10 +27,11 @@ afterEach(() => {
 
 it("renders an honest empty workspace and disabled future features", async () => {
   render(<App />);
-  expect(screen.getByText("No repository loaded.")).toBeTruthy();
+  await waitFor(() =>
+    expect(screen.getByText("No repository loaded.")).toBeTruthy(),
+  );
   expect(screen.getByText("No file selected")).toBeTruthy();
   for (const label of [
-    "Repository, available in M1",
     "Graph, available in M3",
     "Insights, available in M5",
     "AI, available in M7",
@@ -54,7 +63,7 @@ it("shows offline status and reconnects on retry", async () => {
   await waitFor(() =>
     expect(screen.getAllByText("Connected").length).toBeGreaterThan(0),
   );
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
 it("supports keyboard navigation to Settings and back without enabling future features", async () => {
@@ -64,13 +73,19 @@ it("supports keyboard navigation to Settings and back without enabling future fe
   await user.tab(); // top-bar Settings
   await user.tab();
   expect(workspace).toBe(document.activeElement);
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Repository" })).toBe(
+    document.activeElement,
+  );
   await user.tab(); // disabled milestones are skipped
   expect(
-    screen.getByRole("navigation").querySelector("[aria-current]"),
+    screen.getByRole("navigation").querySelector('[aria-current="page"]'),
   ).not.toBeNull();
   await user.keyboard("{Enter}");
   expect(screen.getByRole("heading", { name: "Settings." })).toBeTruthy();
   await user.click(workspace);
-  expect(screen.getByText("No repository loaded.")).toBeTruthy();
-  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(screen.getByText("No repository loaded.")).toBeTruthy(),
+  );
+  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
 });
