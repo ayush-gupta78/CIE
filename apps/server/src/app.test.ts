@@ -9,7 +9,10 @@ afterEach(() => app.close());
 
 describe("local API", () => {
   it("returns only the stable, nonsensitive health contract", async () => {
-    const response = await app.inject("/api/v1/health");
+    const response = await app.inject({
+      url: "/api/v1/health",
+      headers: { host: "127.0.0.1:3001" },
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
       status: "ok",
@@ -20,6 +23,13 @@ describe("local API", () => {
   });
 
   it("does not expose a filesystem API", async () => {
-    expect((await app.inject("/api/v1/files")).statusCode).toBe(404);
+    expect(
+      (
+        await app.inject({
+          url: "/api/v1/files",
+          headers: { host: "127.0.0.1:3001" },
+        })
+      ).statusCode,
+    ).toBe(404);
   });
 });
