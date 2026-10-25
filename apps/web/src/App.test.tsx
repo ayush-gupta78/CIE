@@ -25,28 +25,33 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("renders an honest empty workspace and disabled future features", async () => {
+it("renders an honest empty workspace with Graph navigation and disabled later features", async () => {
   render(<App />);
   await waitFor(() =>
     expect(screen.getByText("No repository loaded.")).toBeTruthy(),
   );
   expect(screen.getByText("No file selected")).toBeTruthy();
-  for (const label of [
-    "Graph, available in M3",
-    "Insights, available in M5",
-    "AI, available in M7",
-  ]) {
+  const graph = screen.getByRole("button", {
+    name: "Graph",
+  }) as HTMLButtonElement;
+  expect(graph.disabled).toBe(false);
+  for (const label of ["Insights, available in M5", "AI, available in M7"]) {
     expect(
       (screen.getByRole("button", { name: label }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
   }
   expect(
-    (screen.getByRole("button", { name: /3D M3/ }) as HTMLButtonElement)
-      .disabled,
+    (screen.getByRole("button", { name: "3D" }) as HTMLButtonElement).disabled,
   ).toBe(true);
   await waitFor(() =>
     expect(screen.getAllByText("Connected").length).toBeGreaterThan(0),
+  );
+  await userEvent.click(graph);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("heading", { name: "No repository selected." }),
+    ).toBeTruthy(),
   );
 });
 
@@ -75,6 +80,10 @@ it("supports keyboard navigation to Settings and back without enabling future fe
   expect(workspace).toBe(document.activeElement);
   await user.tab();
   expect(screen.getByRole("button", { name: "Repository" })).toBe(
+    document.activeElement,
+  );
+  await user.tab(); // Graph is now available
+  expect(screen.getByRole("button", { name: "Graph" })).toBe(
     document.activeElement,
   );
   await user.tab(); // disabled milestones are skipped

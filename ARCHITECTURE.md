@@ -1,10 +1,10 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. M0/M1 history and current M2 implementation are described below.
+> Living decision record. M0–M2 history and current M3 implementation are described below.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0 completed; M1 repository explorer approved by owner; M2 reviewed PASS WITH ISSUES, targeted correction awaiting re-review before M3.
+- **Stage:** M0–M2 owner-approved; M3 interactive 3D file graph implemented, awaiting independent review.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
 - **Current date for decision log:** 2026-10-25
@@ -58,7 +58,7 @@ M0 baseline: `apps/web` rendered an honest empty workspace and Settings; it chec
 
 ## Code boundaries
 
-- `apps/web`: React+TypeScript view/state, responsive shell; no direct Node FS or secret persistence.
+- `apps/web`: React+TypeScript view/state, responsive shell and M3 graph renderer; no direct Node FS or secret persistence.
 - `apps/server`: localhost-only HTTP API, M1 repository read boundary and M2 bounded static analysis/graph service.
 - `packages/shared` (if useful): DTOs and discriminated API types; no overengineering for one health endpoint.
 - `docs/`: design decisions, QA and milestone notes. Root `ARCHITECTURE.md` is source of truth for implementation evolution.
@@ -107,18 +107,18 @@ Edges will have deterministic traceability where supported; unresolved/external 
 
 ## Milestones and deliverables
 
-| Milestone | Scope                                                                                                   | Gate                                                              |
-| --------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs                        | install/dev/build/typecheck/lint/tests run; truthful local status |
-| **M1**    | local repository ingestion, directory tree, ignore handling                                             | browse a real local repo                                          |
-| **M2**    | import/relationship parser and graph model — PASS WITH ISSUES; import-equals correction awaiting review | explainable nodes & edges; tests and real-repo trial below        |
-| **M3**    | interactive 3D file graph, camera and labels                                                            | browse real dependencies in spatial depth                         |
-| **M4**    | alternate 2D graph and synchronized navigation                                                          | both modes operate on same graph                                  |
-| **M5**    | non-LLM code intelligence                                                                               | dependency metrics, impact and cycles                             |
-| **M6**    | file inspector and source references                                                                    | accurate source/detail navigation                                 |
-| **M7**    | optional LLM adapter/retrieval                                                                          | explicit opt-in, grounded explanations                            |
-| **M8**    | performance, security hardening, DX                                                                     | realistic repo scale and robust failures                          |
-| **M9**    | tests, docs, distribution/release                                                                       | runnable tested v1.0                                              |
+| Milestone | Scope                                                                                   | Gate                                                              |
+| --------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs        | install/dev/build/typecheck/lint/tests run; truthful local status |
+| **M1**    | local repository ingestion, directory tree, ignore handling                             | browse a real local repo                                          |
+| **M2**    | import/relationship parser and graph model — owner-approved                             | explainable nodes & edges; tests and real-repo trial below        |
+| **M3**    | interactive 3D file graph, camera and labels — implemented, awaiting independent review | browse real dependencies in spatial depth                         |
+| **M4**    | alternate 2D graph and synchronized navigation                                          | both modes operate on same graph                                  |
+| **M5**    | non-LLM code intelligence                                                               | dependency metrics, impact and cycles                             |
+| **M6**    | file inspector and source references                                                    | accurate source/detail navigation                                 |
+| **M7**    | optional LLM adapter/retrieval                                                          | explicit opt-in, grounded explanations                            |
+| **M8**    | performance, security hardening, DX                                                     | realistic repo scale and robust failures                          |
+| **M9**    | tests, docs, distribution/release                                                       | runnable tested v1.0                                              |
 
 ## Decision log (append; never silently rewrite)
 
@@ -177,7 +177,7 @@ M1 verification: frozen-lockfile install, `pnpm typecheck`, `pnpm lint`, `pnpm t
 - Exact screenshots of preferred final UI can further refine token values and component shapes; explicit user corrections take priority.
 - Native directory chooser integration and a stricter capability sandbox, if later required by distribution threat model.
 - M2 initial language/schema choice is recorded in ADR-019 below; additional languages remain deferred.
-- M3 graph layout and rendering-performance strategy.
+- M3 renderer and layout are recorded in ADR-020; large-repository tuning remains open.
 - M7 choice of external vs local LLM providers and opt-in details.
 
 ## Document maintenance protocol
@@ -202,3 +202,19 @@ Analysis fails atomically on >200 source files, >1 MiB/file, >8 MiB captured sou
 Status: Implemented / awaiting independent M2 review. Date: 2026-10-25. The roadmap defines M2 parser/data, M3 rendering, M4 2D and M6 inspection separately. Select the existing pinned TypeScript compiler as the AST parser and a single in-memory graph tied to the M1 selection; avoid an added database, separate graph store or new UI. Alternatives: regex scanning (unsound for source syntax), full language-server/tsconfig resolution (broader than M2), persistent database (unneeded at current scale). Tradeoffs: deterministic minimal surface and offline behavior, but bounded scale, no persistence, and only conservative static relative resolution. The graph endpoint inherits the existing local Host/Origin gate and exposes no source bytes; malicious local processes and concurrent filesystem replacement remain outside its guarantee. Evidence: `apps/server/src/graph.test.ts`, `apps/server/src/graph.core.test.ts`, full workspace checks and real CIE-root trial in the M2 handoff. The M3/M4 approved dark editorial design is unchanged.
 
 M2 review follow-up (2026-10-25): independent decision PASS WITH ISSUES; the targeted import-equals correction increments `analyzerVersion` from `m2-ts-1` to `m2-ts-2` while retaining graph schema version 1. `UNSUPPORTED_IMPORT_SYNTAX` is deterministic and marks coverage partial. Correction is implemented and awaits reviewer verification; this entry does not authorize M3 by itself.
+
+Owner transition (2026-10-26): the owner explicitly approved M2 after the correction and authorized M3. Earlier review-status entries remain as historical records.
+
+## M3 interactive 3D graph — implemented for independent review
+
+`apps/web/src/graphApi.ts` validates the existing M2 schema v1 and selection/revision identity before accepting either `GET /api/v1/repository/graph` or explicit `POST /api/v1/repository/analyze`. `GraphPage.tsx` owns one graph snapshot, selection, search and camera commands, and keeps a previous graph only after failed re-analysis of the same revision. Switching repository/revision clears selection and graph; aborted/outdated responses cannot publish stale nodes. Health polling does not clear a current graph. The Graph page is lazy-loaded, leaving the original Workspace, Repository tree, Settings, local connection status and Fastify routes intact.
+
+`graphModel.ts` projects only `resolved_static` edges with real targets; direction is importer → imported file. Parallel declarations are merged only for visual lines and retained individually for the inspector. Groups come from real parent paths, including flat `.`; their colors and file positions are deterministic. A sorted three-level layout places leaf folders near second-segment modules within major root-folder clusters, separated on x/y/z; deeper paths share their module cluster. Directory labels and small markers annotate the hierarchy, not enclosing shells or dependency-bearing file nodes. A bounded enclosing radius and viewport-aspect-aware home camera provide fit/reset. A selected file highlights outgoing gold and incoming blue arrows, while the inspector exposes the actual source-path/line evidence, type, status and neighbors. No source content, symbol search, impact metrics or external target nodes are inferred.
+
+`GraphScene3D.tsx` mounts Three.js 0.186.1 + `@react-three/fiber` 9.8.2 with `@react-three/drei` 10.7.9 for HTML labels and lines; `@types/three` 0.186.0 is a build-time type dependency. The perspective WebGL scene uses OrbitControls (left-drag orbit, right-drag/two-finger pan, wheel/pinch zoom), node picking, focus, fit and reset. It renders on demand with capped DPR 1.5, no idle particle animation or remote assets. Default labels are capped/keyed by group and selection; the file tree and inspector remain a keyboard-accessible alternative. Failed/unavailable WebGL exposes the same actual file and relation list, not the M4 2D map. Reduced motion uses the existing OS-media CSS policy and no continuous animation. M4's 2D affordance remains disabled.
+
+The seven approved screenshot references were provided as a text crosswalk in the ignored M3 handoff archive, not as accessible originals. Screens 2–4 guide the original black/bronze 3D composition, while screen 1 guides file identity and relationship panels; 5–7 remain later-milestone references. No pixel-level match is claimed. Browser captures from actual CIE data are under `docs/screenshots/m3-*.png`.
+
+### ADR-020 — Demand-rendered Three/R3F scene with deterministic path clusters
+
+Status: Implemented / awaiting independent M3 review. Date: 2026-10-26. The M2 graph v1 is already the factual source, so the renderer consumes it without server or parser changes. Chosen: Three.js/R3F scene with OrbitControls, limited HTML labels, and a pure deterministic path-root/module/leaf layout; React local state owns selection and separate fetch/analysis request lifecycles. Alternatives: CSS-transformed SVG (not genuine 3D), raw WebGL/custom camera (more code and maintenance), full force-layout framework (nondeterminism and unnecessary runtime cost). Costs: WebGL and rendering libraries increase the lazy-loaded graph bundle; labels/line meshes can crowd small or maximum-size graphs. Mitigations: demand rendering, label cap, 200-file M2 ceiling, accessible tree/inspector fallback, no target-code execution or remote calls. M3 approval and performance at M2's upper limit still require independent review.

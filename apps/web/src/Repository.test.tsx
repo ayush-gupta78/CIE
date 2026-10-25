@@ -172,7 +172,7 @@ it("selects, expands, paginates, inspects metadata and deselects", async () => {
     ).toBeTruthy(),
   );
   expect(
-    (screen.getByRole("button", { name: /Graph.*M3/ }) as HTMLButtonElement)
+    (screen.getByRole("button", { name: "Graph" }) as HTMLButtonElement)
       .disabled,
-  ).toBe(true);
+  ).toBe(false);
 });

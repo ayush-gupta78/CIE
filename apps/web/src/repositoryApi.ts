@@ -28,6 +28,8 @@ const messages: Record<string, string> = {
     "Directory is inaccessible, excluded, or has changed. Choose another directory.",
   NO_REPOSITORY_SELECTED: "No repository is selected. Open one first.",
   STALE_REPOSITORY: "Repository view changed. Refresh or choose it again.",
+  ANALYSIS_LIMIT:
+    "Analysis limit reached. Select a smaller repository or exclude generated files, then retry.",
   DIRECTORY_TOO_LARGE:
     "This directory exceeds the browsing limit of 5,000 entries.",
   IGNORE_TOO_LARGE: "An ignore file exceeds the supported size of 256 KiB.",
@@ -69,7 +71,10 @@ const entry = (value: unknown): value is Entry =>
   (value.modifiedAt === undefined || typeof value.modifiedAt === "string") &&
   (value.languageHint === undefined || typeof value.languageHint === "string");
 
-async function request(url: string, init?: RequestInit): Promise<unknown> {
+export async function request(
+  url: string,
+  init?: RequestInit,
+): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(url, { cache: "no-store", ...init });
@@ -101,7 +106,7 @@ async function request(url: string, init?: RequestInit): Promise<unknown> {
   }
   return data;
 }
-const json = (
+export const json = (
   method: string,
   body: object,
   signal?: AbortSignal,

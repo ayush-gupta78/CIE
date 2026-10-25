@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useLocalHealth } from "./useLocalHealth";
 import { Workspace } from "./Workspace";
 import { Settings } from "./Settings";
 import { RepositoryPage } from "./RepositoryPage";
+
 import { currentRepository, type Entry, type Selection } from "./repositoryApi";
 
-type Page = "workspace" | "repository" | "settings";
+type Page = "workspace" | "repository" | "graph" | "settings";
+const GraphPage = lazy(() =>
+  import("./GraphPage").then((module) => ({ default: module.GraphPage })),
+);
 
 const future = [
-  { label: "Graph", milestone: "M3" },
   { label: "Insights", milestone: "M5" },
   { label: "AI", milestone: "M7" },
 ];
@@ -95,7 +98,7 @@ export function App() {
         </div>
       </header>
 
-      <div className="layout">
+      <div className={`layout ${page === "graph" ? "graph-layout" : ""}`}>
         <nav className="sidebar" aria-label="Primary navigation">
           <div className="nav-heading">Navigate</div>
           <button
@@ -113,6 +116,14 @@ export function App() {
             onClick={() => setPage("repository")}
           >
             Repository
+          </button>
+          <button
+            type="button"
+            className={`nav-item ${page === "graph" ? "active" : ""}`}
+            aria-current={page === "graph" ? "page" : undefined}
+            onClick={() => setPage("graph")}
+          >
+            Graph
           </button>
           {future.map(({ label, milestone }) => (
             <button
@@ -144,11 +155,15 @@ export function App() {
           </div>
         </nav>
 
-        <main className="main" id="main-content">
+        <main
+          className={`main ${page === "graph" ? "graph-main" : ""}`}
+          id="main-content"
+        >
           {page === "workspace" ? (
             <Workspace
               repository={repository}
               onOpenRepository={() => setPage("repository")}
+              onOpenGraph={() => setPage("graph")}
             />
           ) : page === "repository" ? (
             <RepositoryPage
@@ -159,6 +174,19 @@ export function App() {
               onStale={onStale}
               startupError={startupError}
             />
+          ) : page === "graph" ? (
+            <Suspense fallback={<p role="status">Loading graph view…</p>}>
+              <GraphPage
+                key={
+                  repository
+                    ? `${repository.repositoryId}:${repository.revision}`
+                    : "none"
+                }
+                repository={repository}
+                connection={connection}
+                onOpenRepository={() => setPage("repository")}
+              />
+            </Suspense>
           ) : (
             <Settings
               version={version}
@@ -169,62 +197,65 @@ export function App() {
           )}
         </main>
 
-        <aside className="inspector" aria-label="File details">
-          <div className="inspector-heading">
-            <span>File details</span>
-            <span className="inspector-dash" aria-hidden="true">
-              —
+        {page !== "graph" && (
+          <aside className="inspector" aria-label="File details">
+            <div className="inspector-heading">
+              <span>File details</span>
+              <span className="inspector-dash" aria-hidden="true">
+                —
+              </span>
+            </div>
+            {selectedFile && repository ? (
+              <div className="inspector-empty">
+                <span className="inspector-glyph" aria-hidden="true">
+                  ◌
+                </span>
+                <h2 title={selectedFile.name}>{selectedFile.name}</h2>
+                <dl className="file-metadata">
+                  <dt>Path</dt>
+                  <dd title={selectedFile.path}>{selectedFile.path}</dd>
+                  <dt>Type</dt>
+                  <dd>File</dd>
+                  <dt>Size</dt>
+                  <dd>
+                    {selectedFile.sizeBytes?.toLocaleString() ?? "Unknown"}{" "}
+                    bytes
+                  </dd>
+                  <dt>Modified</dt>
+                  <dd>
+                    {selectedFile.modifiedAt
+                      ? new Date(selectedFile.modifiedAt).toLocaleString()
+                      : "Unknown"}
+                  </dd>
+                  {selectedFile.languageHint && (
+                    <>
+                      <dt>Language (inferred)</dt>
+                      <dd>{selectedFile.languageHint}</dd>
+                    </>
+                  )}
+                </dl>
+                <p>
+                  Source preview and dependency insights arrive in later
+                  milestones.
+                </p>
+              </div>
+            ) : (
+              <div className="inspector-empty">
+                <span className="inspector-glyph" aria-hidden="true">
+                  ◌
+                </span>
+                <h2>No file selected</h2>
+                <p>
+                  Select a real file in Repository to see basic metadata. Source
+                  preview and dependency insights arrive later.
+                </p>
+              </div>
+            )}
+            <span className="inspector-footer">
+              {repository ? repository.rootName : "Awaiting a repository"}
             </span>
-          </div>
-          {selectedFile && repository ? (
-            <div className="inspector-empty">
-              <span className="inspector-glyph" aria-hidden="true">
-                ◌
-              </span>
-              <h2 title={selectedFile.name}>{selectedFile.name}</h2>
-              <dl className="file-metadata">
-                <dt>Path</dt>
-                <dd title={selectedFile.path}>{selectedFile.path}</dd>
-                <dt>Type</dt>
-                <dd>File</dd>
-                <dt>Size</dt>
-                <dd>
-                  {selectedFile.sizeBytes?.toLocaleString() ?? "Unknown"} bytes
-                </dd>
-                <dt>Modified</dt>
-                <dd>
-                  {selectedFile.modifiedAt
-                    ? new Date(selectedFile.modifiedAt).toLocaleString()
-                    : "Unknown"}
-                </dd>
-                {selectedFile.languageHint && (
-                  <>
-                    <dt>Language (inferred)</dt>
-                    <dd>{selectedFile.languageHint}</dd>
-                  </>
-                )}
-              </dl>
-              <p>
-                Source preview and dependency insights arrive in later
-                milestones.
-              </p>
-            </div>
-          ) : (
-            <div className="inspector-empty">
-              <span className="inspector-glyph" aria-hidden="true">
-                ◌
-              </span>
-              <h2>No file selected</h2>
-              <p>
-                Select a real file in Repository to see basic metadata. Source
-                preview and dependency insights arrive later.
-              </p>
-            </div>
-          )}
-          <span className="inspector-footer">
-            {repository ? repository.rootName : "Awaiting a repository"}
-          </span>
-        </aside>
+          </aside>
+        )}
       </div>
 
       <footer className="statusbar">
@@ -248,7 +279,8 @@ export function App() {
                 ? "Unknown"
                 : "Not selected"}
           </strong>{" "}
-          · Graph: not built
+          · Graph:{" "}
+          {page === "graph" ? "Explorer open" : "Open Graph to analyze"}
         </span>
         <span className="status-version">CIE / {version}</span>
       </footer>

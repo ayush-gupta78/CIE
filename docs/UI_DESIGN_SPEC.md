@@ -117,3 +117,17 @@ No deceptive interactions, fake activity, disabled control without explanation, 
 ## 7. How to resolve differences from shared chat screenshots
 
 This document records the **explicit corrections that can be confirmed from the conversation**. It does **not** claim that every shared generated image has been reproduced or that sample color codes are exact. The coding agent should compare the final relevant approved visuals if it has access; **do not prioritize an older, rejected image over newer user feedback**. If images are inaccessible, keep the approved _principles_ above and note missing pixel-level reference in the final agent report. Do not stop the M0 implementation over missing images.
+
+## 8. M3 owner-approved reference crosswalk (2026-10-26)
+
+The owner approved seven reference screenshots. Their original image files are not in the M3 archive, so this records the supplied text crosswalk rather than claiming pixel sampling:
+
+| Screenshot                                             | M3 use                                                                            | Deferred scope                                                    |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1 — dark 2D dependency view                            | Accurate tree, file names, path labels, dependency direction and selection detail | Functional 2D mode (M4)                                           |
+| 2 — luminous 3D clusters                               | Spatial depth, connected file nodes, restrained gold lighting                     | Prototype name and source editor (M6)                             |
+| 3 — directory regions                                  | Real module grouping, search, camera and label controls                           | Unproven metrics or a fake minimap (M5)                           |
+| 4 — spatial file relationships                         | True perspective orbit, file-to-file import direction, inspector clarity          | Functional 2D mode (M4)                                           |
+| 5–7 — source workspace, landing and inspector concepts | Restrained typography/framing only                                                | Code/AI/advanced intelligence (M5–M7), unrelated landing redesign |
+
+M3 keeps CIE identity and the existing predominantly black shell. The graph itself is data-driven, with muted path-group colors, file labels and verified edges; no mock project labels, fantasy characters, kingdom scenery or remote assets. The M4 button remains visibly disabled. Actual visual fidelity against the unavailable image originals remains for owner review.

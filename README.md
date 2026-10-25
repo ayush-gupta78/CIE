@@ -1,6 +1,6 @@
 # CIE
 
-AI Codebase Intelligence Engine is a local-first codebase explorer. M1 lets you browse an explicitly selected local directory; M2 adds an on-demand static TypeScript/JavaScript source graph through the API. The UI does not render the graph yet (M3/M4).
+AI Codebase Intelligence Engine is a local-first codebase explorer. Select a local repository, analyze supported TypeScript/JavaScript files, and explore their verified connections in a genuine interactive 3D Graph. The alternate 2D map remains M4.
 
 ## Run locally
 
@@ -15,6 +15,8 @@ pnpm dev
 Open http://127.0.0.1:5173/; the Fastify API listens at http://127.0.0.1:3001/. Both bind to `127.0.0.1`; Vite proxies `/api` to the server. Stop both with Ctrl-C. Ports 5173 and 3001 must be free. The interface loads while the API is offline and reports connectivity accurately.
 
 Go to Repository, enter an absolute local folder path such as `/path/to/your/project`, then choose Open repository. Browsers cannot provide a normal folder input's absolute local path, so this manual path explicitly authorizes the local server to browse that directory. A `.git` folder is not required. Expand folders, select a file for basic metadata, use Load more for large directories, Refresh to see disk changes, Change repository to select another root, or Close repository to deselect without deleting any files. Selection lives in this server process only and is lost on restart.
+
+Open **Graph** from the sidebar. If this repository has no published graph, choose **Analyze repository**; analysis is never started by merely opening the page. The scene and file list contain only files returned by M2. Search by filename or relative path, choose a file from the list or a visible node to highlight its verified links, and use the right panel for outgoing (uses) and incoming (referenced by) files and declaration line evidence. Duplicate file names remain distinct by full path. Left-drag to orbit, right-drag or use two fingers to pan, wheel/pinch to zoom; **Focus file**, **Fit view** and **Reset** adjust the camera. **All labels** may overlap in dense graphs; **Key labels** limits label density. Escape clears selection. The visible 2D button is disabled until M4. If WebGL fails, the real file/relationship lists remain usable. Switching or refreshing a repository invalidates its old graph; re-analysis must be explicit. Graph data is held in server and browser memory, not persisted.
 
 ```sh
 pnpm typecheck
@@ -55,9 +57,9 @@ Generated directories (`.git`, `node_modules`, `dist`, `build`, `coverage`, `.ne
 
 ## Structure and scope
 
-- `apps/web/`: React/Vite shell, responsive repository tree, health and repository API clients, design tokens.
+- `apps/web/`: React/Vite shell, repository tree, health and repository API clients, validated M2 graph client and M3 Three.js spatial view.
 - `apps/server/`: Fastify HTTP gate, in-memory selection, bounded filesystem explorer and M2 static graph API.
 - `ARCHITECTURE.md`: living data flow, trust boundaries, roadmap and append-only decisions.
 - `docs/UI_DESIGN_SPEC.md`: approved original design direction; `docs/screenshots/`: browser captures.
 
-Workspace, Repository and Settings navigation work. The 3D/2D controls and Graph/Insights/AI navigation remain visibly disabled. M2 extraction is API-only; its PASS WITH ISSUES import-equals correction awaits review before M3. M3 3D, M4 2D, M5 analysis, M6 source inspector and M7 optional AI were not built. No signup, telemetry, external runtime API, code upload or account is required.
+Workspace, Repository, Graph and Settings navigation work. M0–M2 are owner-approved; M3 3D is implemented and awaits independent review. The 2D button and Insights/AI navigation remain disabled; M4 2D, M5 advanced analysis, M6 source inspection and M7 optional AI were not built. No signup, telemetry, external runtime API, code upload or account is required. The seven owner-approved image originals were not included in the M3 handoff; `docs/UI_DESIGN_SPEC.md` records the provided reference crosswalk instead of claiming pixel matching.
