@@ -1,0 +1,310 @@
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { createApp } from "./app.js";
+
+let base: string;
+let root: string;
+let app: ReturnType<typeof createApp>;
+const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
+const post = (url: string, payload: object) =>
+  app.inject({
+    method: "POST",
+    url,
+    headers: { ...headers, "content-type": "application/json" },
+    payload,
+  });
+const get = (url = "/api/v1/repository/graph") => app.inject({ url, headers });
+
+beforeEach(async () => {
+  base = await mkdtemp(join(tmpdir(), "cie-m2-"));
+  root = join(base, "repo");
+  await mkdir(join(root, "apps", "web"), { recursive: true });
+  await mkdir(join(root, "apps", "server"), { recursive: true });
+  await mkdir(join(root, "node_modules"));
+  await writeFile(join(root, ".gitignore"), "ignored/\n");
+  await mkdir(join(root, "ignored"));
+  await writeFile(join(root, "ignored", "hidden.ts"), "export {};");
+  await writeFile(join(root, "node_modules", "hidden.ts"), "export {};");
+  await writeFile(join(root, ".env"), "PASSWORD=secret");
+  await writeFile(
+    join(root, "apps", "web", "util.ts"),
+    "export const value = 1;\n",
+  );
+  await writeFile(
+    join(root, "apps", "server", "util.ts"),
+    "export const value = 2;\n",
+  );
+  await writeFile(
+    join(root, "apps", "web", "entry.ts"),
+    "import { value } from './util';\nimport '../server/util';\nimport 'external';\nimport './absent';\nconst x = import('./util');\nexport { value } from './util';\n",
+  );
+  await writeFile(
+    join(root, "apps", "web", "broken.ts"),
+    "import { from './util';\n",
+  );
+  await writeFile(join(root, "apps", "web", "café.ts"), "export {};\n");
+  await writeFile(
+    join(root, "apps", "web", "side-effect.ts"),
+    "import { writeFileSync } from 'node:fs'; writeFileSync('SENTINEL', 'executed');\n",
+  );
+  try {
+    await symlink(base, join(root, "escape"), "dir");
+  } catch {
+    /* unsupported */
+  }
+  app = createApp();
+});
+afterEach(async () => {
+  await app.close();
+  await rm(base, { recursive: true, force: true });
+});
+
+it("builds a deterministic source-backed graph without executing source", async () => {
+  expect((await get()).statusCode).toBe(409);
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const indexed = await post("/api/v1/repository/analyze", {
+    repositoryId: selected.repositoryId,
+    revision: selected.revision,
+  });
+  expect(indexed.statusCode).toBe(200);
+  const graph = (await get()).json();
+  expect(graph).toEqual(indexed.json());
+  expect(graph.files.map((f: { path: string }) => f.path)).toContain(
+    "apps/web/café.ts",
+  );
+  expect(graph.files.map((f: { path: string }) => f.path)).not.toContain(
+    "node_modules/hidden.ts",
+  );
+  expect(graph.directories).toContain("apps/web");
+  const entry = graph.files.find(
+    (f: { path: string }) => f.path === "apps/web/entry.ts",
+  );
+  const webUtil = graph.files.find(
+    (f: { path: string }) => f.path === "apps/web/util.ts",
+  );
+  const serverUtil = graph.files.find(
+    (f: { path: string }) => f.path === "apps/server/util.ts",
+  );
+  expect(webUtil.id).not.toBe(serverUtil.id);
+  expect(
+    graph.edges.filter(
+      (e: { from: string; to: string }) =>
+        e.from === entry.id && e.to === webUtil.id,
+    ),
+  ).toHaveLength(2);
+  expect(graph.edges).toContainEqual(
+    expect.objectContaining({
+      from: entry.id,
+      to: serverUtil.id,
+      resolution: "resolved_static",
+      evidence: expect.objectContaining({
+        path: "apps/web/entry.ts",
+        line: 2,
+        column: 1,
+      }),
+    }),
+  );
+  expect(graph.edges).toContainEqual(
+    expect.objectContaining({
+      from: entry.id,
+      to: null,
+      resolution: "external",
+    }),
+  );
+  expect(graph.edges).toContainEqual(
+    expect.objectContaining({
+      from: entry.id,
+      to: null,
+      resolution: "unresolved",
+    }),
+  );
+  expect(graph.diagnostics).toContainEqual(
+    expect.objectContaining({
+      path: "apps/web/broken.ts",
+      code: "PARSE_ERROR",
+    }),
+  );
+  expect(graph.diagnostics).toContainEqual(
+    expect.objectContaining({
+      path: "apps/web/entry.ts",
+      code: "DYNAMIC_IMPORT",
+    }),
+  );
+  expect(graph.partial).toBe(true);
+  expect(await readFile(join(root, "SENTINEL")).catch(() => null)).toBeNull();
+  const again = (
+    await post("/api/v1/repository/analyze", {
+      repositoryId: selected.repositoryId,
+      revision: selected.revision,
+    })
+  ).json();
+  expect(again).toEqual(graph);
+  await writeFile(join(root, "apps", "web", "entry.ts"), "import './util';\n");
+  expect((await get()).json()).toEqual(graph);
+  const changed = (
+    await post("/api/v1/repository/analyze", {
+      repositoryId: selected.repositoryId,
+      revision: selected.revision,
+    })
+  ).json();
+  expect(changed.manifest).not.toBe(graph.manifest);
+  expect(changed.edges).not.toEqual(graph.edges);
+});
+
+it("rejects stale selection and hostile graph requests", async () => {
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  expect(
+    (
+      await post("/api/v1/repository/analyze", {
+        repositoryId: selected.repositoryId,
+        revision: selected.revision + 1,
+      })
+    ).statusCode,
+  ).toBe(409);
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/repository/analyze",
+        headers: {
+          ...headers,
+          origin: "https://evil.example",
+          "content-type": "application/json",
+        },
+        payload: selected,
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await app.inject({
+        url: "/api/v1/repository/graph",
+        headers: { ...headers, host: "evil.example" },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await post("/api/v1/repository/analyze", {
+        path: "../../etc",
+        ...selected,
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+
+it("retains the last graph after a failed bounded reanalysis and clears it on refresh", async () => {
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const first = (
+    await post("/api/v1/repository/analyze", {
+      repositoryId: selected.repositoryId,
+      revision: selected.revision,
+    })
+  ).json();
+  await writeFile(
+    join(root, "apps", "web", "oversized.ts"),
+    "a".repeat(1024 * 1024 + 1),
+  );
+  const failed = await post("/api/v1/repository/analyze", {
+    repositoryId: selected.repositoryId,
+    revision: selected.revision,
+  });
+  expect(failed.statusCode).toBe(422);
+  expect(failed.json().error.code).toBe("ANALYSIS_LIMIT");
+  expect((await get()).json()).toEqual(first);
+  await post("/api/v1/repository/rescan", {});
+  expect((await get()).statusCode).toBe(409);
+});
+
+it("rejects binary-like sources instead of interpreting replacement characters as evidence", async () => {
+  await writeFile(
+    join(root, "apps", "web", "binary.ts"),
+    Buffer.from([0xff, 0xfe, 0x00]),
+  );
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const graph = (
+    await post("/api/v1/repository/analyze", {
+      repositoryId: selected.repositoryId,
+      revision: selected.revision,
+    })
+  ).json();
+  expect(graph.files.map((file: { path: string }) => file.path)).not.toContain(
+    "apps/web/binary.ts",
+  );
+  expect(graph.diagnostics).toContainEqual({
+    path: "apps/web/binary.ts",
+    code: "UNSUPPORTED_ENCODING",
+  });
+});
+
+it("rejects analysis exceeding the source-file quota rather than publishing a partial graph", async () => {
+  const crowded = join(root, "crowded");
+  await mkdir(crowded);
+  await Promise.all(
+    Array.from({ length: 201 }, (_, i) =>
+      writeFile(join(crowded, `${i}.ts`), "export {};\n"),
+    ),
+  );
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const response = await post("/api/v1/repository/analyze", {
+    repositoryId: selected.repositoryId,
+    revision: selected.revision,
+  });
+  expect(response.statusCode).toBe(422);
+  expect((await get()).statusCode).toBe(409);
+});
+
+it("rejects too many empty directories without publishing an incomplete graph", async () => {
+  await Promise.all(
+    Array.from({ length: 1001 }, (_, i) => mkdir(join(root, `dir${i}`))),
+  );
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const response = await post("/api/v1/repository/analyze", {
+    repositoryId: selected.repositoryId,
+    revision: selected.revision,
+  });
+  expect(response.statusCode).toBe(422);
+  expect((await get()).statusCode).toBe(409);
+});
+
+it("maps excessive imports to a bounded API error and retains the prior graph", async () => {
+  const selected = (
+    await post("/api/v1/repository/select", { path: root })
+  ).json();
+  const payload = {
+    repositoryId: selected.repositoryId,
+    revision: selected.revision,
+  };
+  const before = (await post("/api/v1/repository/analyze", payload)).json();
+  await writeFile(
+    join(root, "apps", "web", "many.ts"),
+    Array.from({ length: 1001 }, (_, i) => `import './missing${i}';`).join(
+      "\n",
+    ),
+  );
+  const response = await post("/api/v1/repository/analyze", payload);
+  expect(response.statusCode).toBe(422);
+  expect(response.json().error.code).toBe("ANALYSIS_LIMIT");
+  expect((await get()).json()).toEqual(before);
+});

@@ -1,10 +1,10 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. M0 history and current M1 implementation are described below.
+> Living decision record. M0/M1 history and current M2 implementation are described below.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0 completed; M1 repository explorer implemented (validation status below). M2 not started.
+- **Stage:** M0 completed; M1 repository explorer approved by owner; M2 implemented, awaiting independent review.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
 - **Current date for decision log:** 2026-10-25
@@ -59,7 +59,7 @@ M0 baseline: `apps/web` rendered an honest empty workspace and Settings; it chec
 ## Code boundaries
 
 - `apps/web`: React+TypeScript view/state, responsive shell; no direct Node FS or secret persistence.
-- `apps/server`: localhost-only HTTP API, validation and M1 repository read boundary; no indexing yet.
+- `apps/server`: localhost-only HTTP API, M1 repository read boundary and M2 bounded static analysis/graph service.
 - `packages/shared` (if useful): DTOs and discriminated API types; no overengineering for one health endpoint.
 - `docs/`: design decisions, QA and milestone notes. Root `ARCHITECTURE.md` is source of truth for implementation evolution.
 
@@ -107,18 +107,18 @@ Edges will have deterministic traceability where supported; unresolved/external 
 
 ## Milestones and deliverables
 
-| Milestone | Scope                                                                            | Gate                                                              |
-| --------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs | install/dev/build/typecheck/lint/tests run; truthful local status |
-| **M1**    | local repository ingestion, directory tree, ignore handling                      | browse a real local repo                                          |
-| **M2**    | import/relationship parser and graph model                                       | explainable nodes & edges                                         |
-| **M3**    | interactive 3D file graph, camera and labels                                     | browse real dependencies in spatial depth                         |
-| **M4**    | alternate 2D graph and synchronized navigation                                   | both modes operate on same graph                                  |
-| **M5**    | non-LLM code intelligence                                                        | dependency metrics, impact and cycles                             |
-| **M6**    | file inspector and source references                                             | accurate source/detail navigation                                 |
-| **M7**    | optional LLM adapter/retrieval                                                   | explicit opt-in, grounded explanations                            |
-| **M8**    | performance, security hardening, DX                                              | realistic repo scale and robust failures                          |
-| **M9**    | tests, docs, distribution/release                                                | runnable tested v1.0                                              |
+| Milestone | Scope                                                                                 | Gate                                                              |
+| --------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs      | install/dev/build/typecheck/lint/tests run; truthful local status |
+| **M1**    | local repository ingestion, directory tree, ignore handling                           | browse a real local repo                                          |
+| **M2**    | import/relationship parser and graph model — implemented, awaiting independent review | explainable nodes & edges; tests and real-repo trial below        |
+| **M3**    | interactive 3D file graph, camera and labels                                          | browse real dependencies in spatial depth                         |
+| **M4**    | alternate 2D graph and synchronized navigation                                        | both modes operate on same graph                                  |
+| **M5**    | non-LLM code intelligence                                                             | dependency metrics, impact and cycles                             |
+| **M6**    | file inspector and source references                                                  | accurate source/detail navigation                                 |
+| **M7**    | optional LLM adapter/retrieval                                                        | explicit opt-in, grounded explanations                            |
+| **M8**    | performance, security hardening, DX                                                   | realistic repo scale and robust failures                          |
+| **M9**    | tests, docs, distribution/release                                                     | runnable tested v1.0                                              |
 
 ## Decision log (append; never silently rewrite)
 
@@ -176,7 +176,7 @@ M1 verification: frozen-lockfile install, `pnpm typecheck`, `pnpm lint`, `pnpm t
 - Final product name/brand identity beyond working label `CIE`.
 - Exact screenshots of preferred final UI can further refine token values and component shapes; explicit user corrections take priority.
 - Native directory chooser integration and a stricter capability sandbox, if later required by distribution threat model.
-- M2 parser/language support order and exact graph schema.
+- M2 initial language/schema choice is recorded in ADR-019 below; additional languages remain deferred.
 - M3 graph layout and rendering-performance strategy.
 - M7 choice of external vs local LLM providers and opt-in details.
 
@@ -186,3 +186,17 @@ M1 verification: frozen-lockfile install, `pnpm typecheck`, `pnpm lint`, `pnpm t
 2. Append a dated ADR with alternatives considered and impact; update diagrams, stack, roadmap and actual status.
 3. If changing UI direction, update `UI_DESIGN_SPEC.md` and log supersession. If changing executable commands, update README and checklist.
 4. After each milestone, record validated tests, known issues, and deferred scope. **Never declare an unimplemented milestone complete.**
+
+## M2 source graph — implemented for independent review
+
+`apps/server/src/repository.ts` reuses M1's selected-root, nested `.gitignore`, generated/secret exclusions, canonical containment and Host/Origin gate for an explicit `POST /api/v1/repository/analyze` with JSON `{repositoryId, revision}`. `GET /api/v1/repository/graph` returns the last analysis for that selection/revision, or structured `NO_GRAPH` (409). There is no source-content endpoint or frontend graph view. Selection, deselection and rescan invalidate the graph; failed reanalysis retains the last published graph. The service is single-session, in-memory and loopback-only; it is not a multi-user authentication system.
+
+The supported inputs are UTF-8 `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`. `typescript`'s `createSourceFile` parses captured bytes as data, never executing repository code. Only top-level static ES import/export-from declarations form edges. Relative paths resolve to an exact file, a unique supported extension/index module, or a unique TypeScript source behind a `.js`/`.mjs`/`.cjs` output specifier. Multiple candidates remain unresolved; bare specifiers are external; `require()` and `import()` produce dynamic diagnostics, not verified edges. No tsconfig aliases, package exports, type-checking, symbol graph, cross-language inference, Git history or runtime tracing. Malformed files, including AST nesting overflows, become failed nodes with parse diagnostics; valid siblings remain available. Unsupported/binary files are skipped (binary sources receive `UNSUPPORTED_ENCODING`).
+
+Graph v1 (`apps/server/src/graph.ts`) returns sorted `directories`, named `files` (path, name, parent, language, status, SHA-256, deterministic path ID), directed `edges` (from/to, kind, resolution, specifier, evidence path/1-based line/column/rule/source SHA-256), `diagnostics`, `counts`, `partial`, `schemaVersion`, `analyzerVersion`, `manifest`, and selection ID/revision. The manifest hashes sorted captured path/content hashes; edges and file IDs do not use time or random values. Selection ID/revision are a session envelope and must be excluded when comparing normalized content across independent selections. Duplicate declarations at different source locations remain distinct evidence; directory containment is not a dependency. An edge's SHA-256 pins the source bytes used to calculate its line. No immutable source-content retrieval exists yet; a later inspector must verify this hash or retain captured bytes rather than read changed live content as the cited snapshot.
+
+Analysis fails atomically on >200 source files, >1 MiB/file, >8 MiB captured source, >1,000 directories, >1,000 dependencies, >5,000 entries in any one directory, >32 path segments, or >10 seconds elapsed at cooperative checkpoints. Up to 256 KiB per ignore file retains the M1 limit. Unsupported non-source files count as skipped, making `partial` true; ignored files are not counted. No pagination is needed within the 200-node/1,000-edge response ceiling. Symlinks and special files are refused. The inherited filesystem check/open sequence still has local concurrent-replacement TOCTOU exposure and is not an OS sandbox. Source parsing runs synchronously on bounded captured input; the 10-second guard cannot interrupt one pathological parse mid-call. No network or LLM calls are made.
+
+### ADR-019 — Bounded TypeScript/JavaScript AST graph in existing loopback API
+
+Status: Implemented / awaiting independent M2 review. Date: 2026-10-25. The roadmap defines M2 parser/data, M3 rendering, M4 2D and M6 inspection separately. Select the existing pinned TypeScript compiler as the AST parser and a single in-memory graph tied to the M1 selection; avoid an added database, separate graph store or new UI. Alternatives: regex scanning (unsound for source syntax), full language-server/tsconfig resolution (broader than M2), persistent database (unneeded at current scale). Tradeoffs: deterministic minimal surface and offline behavior, but bounded scale, no persistence, and only conservative static relative resolution. The graph endpoint inherits the existing local Host/Origin gate and exposes no source bytes; malicious local processes and concurrent filesystem replacement remain outside its guarantee. Evidence: `apps/server/src/graph.test.ts`, `apps/server/src/graph.core.test.ts`, full workspace checks and real CIE-root trial in the M2 handoff. The M3/M4 approved dark editorial design is unchanged.

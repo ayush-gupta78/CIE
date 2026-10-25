@@ -12,6 +12,13 @@ import {
 } from "node:path";
 import ignore from "ignore";
 import type { FastifyInstance } from "fastify";
+import {
+  buildGraph,
+  GraphLimitError,
+  isSupportedSource,
+  type Graph,
+  type Source,
+} from "./graph.js";
 
 type Selection = {
   root: string;
@@ -238,6 +245,8 @@ function cursorData(raw: unknown, selection: Selection, dir: string): number {
 
 export function registerRepositoryRoutes(app: FastifyInstance) {
   let selection: Selection | null = null;
+  let graph: Graph | null = null;
+  let analyzing = false;
   let revision = 0;
   let mutation = 0;
   let scans = 0;
@@ -319,6 +328,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         revision: ++revision,
         rootName: basename(root),
       };
+      graph = null;
       return publicSelection(selection);
     } catch (error) {
       throw error instanceof RepoError ? error : fsError(error);
@@ -328,6 +338,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
     mutation++;
     revision++;
     selection = null;
+    graph = null;
     return { selected: false };
   });
   app.post("/api/v1/repository/rescan", async () => {
@@ -341,7 +352,264 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
       );
     mutation++;
     selection = { ...selected, revision: ++revision };
+    graph = null;
     return publicSelection(selection);
+  });
+  app.post("/api/v1/repository/analyze", async (request) => {
+    const selected = requireSelection();
+    const body = request.body;
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
+      Object.keys(body).length !== 2 ||
+      !("repositoryId" in body) ||
+      !("revision" in body) ||
+      typeof body.repositoryId !== "string" ||
+      !Number.isSafeInteger(body.revision)
+    )
+      throw invalid();
+    if (
+      body.repositoryId !== selected.repositoryId ||
+      body.revision !== selected.revision
+    )
+      throw new RepoError(
+        409,
+        "STALE_REPOSITORY",
+        "Repository view changed. Refresh it.",
+      );
+    if (analyzing)
+      throw new RepoError(
+        503,
+        "UNAVAILABLE",
+        "Analysis is busy. Retry shortly.",
+      );
+    analyzing = true;
+    try {
+      await checkRoot(selected);
+      const started = Date.now();
+      const sources: Source[] = [];
+      const skippedDiagnostics: Graph["diagnostics"] = [];
+      let skipped = 0;
+      let bytes = 0;
+      let directories = 0;
+      const stack: string[][] = [[]];
+      while (stack.length) {
+        if (++directories > 1000)
+          throw new RepoError(
+            422,
+            "ANALYSIS_LIMIT",
+            "Directory limit exceeded.",
+          );
+        if (Date.now() - started > 10000)
+          throw new RepoError(
+            422,
+            "ANALYSIS_LIMIT",
+            "Analysis time limit exceeded.",
+          );
+        const segments = stack.pop()!;
+        const { current, rules } = await checkedDirectory(selected, segments);
+        const entries: { name: string; kind: "directory" | "file" }[] = [];
+        let scanned = 0;
+        try {
+          for await (const entry of await opendir(current)) {
+            if (++scanned > MAX_ENTRIES)
+              throw new RepoError(
+                422,
+                "DIRECTORY_TOO_LARGE",
+                "Directory exceeds the supported entry limit.",
+              );
+            if (
+              entry.isSymbolicLink() ||
+              (!entry.isDirectory() && !entry.isFile())
+            )
+              continue;
+            if (ignored([...segments, entry.name], entry.isDirectory(), rules))
+              continue;
+            entries.push({
+              name: entry.name,
+              kind: entry.isDirectory() ? "directory" : "file",
+            });
+          }
+        } catch (error) {
+          throw error instanceof RepoError ? error : fsError(error);
+        }
+        entries.sort((a, b) =>
+          a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+        );
+        for (const entry of entries) {
+          const next = [...segments, entry.name];
+          const path = next.join("/");
+          if (
+            path.length > 1024 ||
+            /[\\%\0]/.test(entry.name) ||
+            next.length > MAX_DEPTH
+          ) {
+            skipped++;
+            continue;
+          }
+          if (entry.kind === "directory") {
+            stack.push(next);
+            continue;
+          }
+          if (!isSupportedSource(path)) {
+            skipped++;
+            continue;
+          }
+          if (sources.length >= 200)
+            throw new RepoError(
+              422,
+              "ANALYSIS_LIMIT",
+              "Source file limit exceeded.",
+            );
+          const candidate = resolve(current, entry.name);
+          let handle;
+          try {
+            const before = await lstat(candidate);
+            if (
+              !before.isFile() ||
+              before.isSymbolicLink() ||
+              !contained(selected.root, await realpath(candidate))
+            )
+              continue;
+            if (
+              before.size > 1024 * 1024 ||
+              bytes + before.size > 8 * 1024 * 1024
+            )
+              throw new RepoError(
+                422,
+                "ANALYSIS_LIMIT",
+                "Source byte limit exceeded.",
+              );
+            handle = await open(
+              candidate,
+              constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+            );
+            const opened = await handle.stat();
+            if (
+              !opened.isFile() ||
+              opened.dev !== before.dev ||
+              opened.ino !== before.ino
+            )
+              throw new RepoError(
+                403,
+                "FORBIDDEN_PATH",
+                "Source file changed during capture.",
+              );
+            const buffer = Buffer.alloc(1024 * 1024 + 1);
+            let length = 0;
+            while (length < buffer.length) {
+              const { bytesRead } = await handle.read(
+                buffer,
+                length,
+                buffer.length - length,
+                length,
+              );
+              if (!bytesRead) break;
+              length += bytesRead;
+            }
+            const after = await handle.stat();
+            if (length > 1024 * 1024 || bytes + length > 8 * 1024 * 1024)
+              throw new RepoError(
+                422,
+                "ANALYSIS_LIMIT",
+                "Source byte limit exceeded.",
+              );
+            if (
+              opened.size !== after.size ||
+              opened.mtimeMs !== after.mtimeMs ||
+              length !== after.size
+            )
+              throw new RepoError(
+                409,
+                "STALE_REPOSITORY",
+                "Source changed during capture. Retry analysis.",
+              );
+            const captured = buffer.subarray(0, length);
+            let validText = !captured.includes(0);
+            if (validText) {
+              try {
+                new TextDecoder("utf-8", { fatal: true }).decode(captured);
+              } catch {
+                validText = false;
+              }
+            }
+            if (!validText) {
+              skipped++;
+              skippedDiagnostics.push({ path, code: "UNSUPPORTED_ENCODING" });
+              continue;
+            }
+            sources.push({ path, bytes: captured });
+            bytes += length;
+          } catch (error) {
+            throw error instanceof RepoError ? error : fsError(error);
+          } finally {
+            await handle?.close();
+          }
+        }
+      }
+      await checkRoot(selected);
+      if (selection !== selected)
+        throw new RepoError(
+          409,
+          "STALE_REPOSITORY",
+          "Repository view changed. Retry analysis.",
+        );
+      let result: Graph;
+      try {
+        result = buildGraph(
+          sources,
+          selected.repositoryId,
+          selected.revision,
+          skipped,
+          skippedDiagnostics,
+        );
+      } catch (error) {
+        if (error instanceof GraphLimitError)
+          throw new RepoError(
+            422,
+            "ANALYSIS_LIMIT",
+            "Dependency limit exceeded.",
+          );
+        throw error;
+      }
+      if (Date.now() - started > 10000)
+        throw new RepoError(
+          422,
+          "ANALYSIS_LIMIT",
+          "Analysis time limit exceeded.",
+        );
+      if (result.edges.length > 1000)
+        throw new RepoError(
+          422,
+          "ANALYSIS_LIMIT",
+          "Dependency limit exceeded.",
+        );
+      if (selection !== selected)
+        throw new RepoError(
+          409,
+          "STALE_REPOSITORY",
+          "Repository view changed. Retry analysis.",
+        );
+      graph = result;
+      return result;
+    } finally {
+      analyzing = false;
+    }
+  });
+  app.get("/api/v1/repository/graph", async () => {
+    requireSelection();
+    if (
+      !graph ||
+      graph.repositoryId !== selection?.repositoryId ||
+      graph.revision !== selection.revision
+    )
+      throw new RepoError(
+        409,
+        "NO_GRAPH",
+        "Analyze the selected repository first.",
+      );
+    return graph;
   });
   app.get("/api/v1/repository/tree", async (request) => {
     const selected = requireSelection();
