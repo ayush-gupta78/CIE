@@ -136,3 +136,52 @@ it("marks dynamic-only connectivity as partial", () => {
   });
   expect(graph.partial).toBe(true);
 });
+
+it("reports import-equals require and qualified aliases without inventing edges", () => {
+  const graph = buildGraph(
+    [
+      source(
+        "src/main.ts",
+        "import dep = require('./dep');\nimport alias = Namespace.Member;\n",
+      ),
+      source("src/dep.ts", "export const value = 1;\n"),
+    ],
+    "repo",
+    1,
+    0,
+  );
+  expect(graph.files.find((file) => file.path === "src/main.ts")?.status).toBe(
+    "parsed",
+  );
+  expect(graph.edges).toEqual([]);
+  expect(graph.diagnostics).toEqual([
+    { path: "src/main.ts", code: "UNSUPPORTED_IMPORT_SYNTAX", line: 1 },
+    { path: "src/main.ts", code: "UNSUPPORTED_IMPORT_SYNTAX", line: 2 },
+  ]);
+  expect(graph.partial).toBe(true);
+});
+
+it("keeps supported imports alongside unsupported import-equals with stable output", () => {
+  const sources = [
+    source(
+      "src/main.ts",
+      "import './dep';\nimport dep = require('./dep');\nexport { value } from './dep';\n",
+    ),
+    source("src/dep.ts", "export const value = 1;\n"),
+  ];
+  const graph = buildGraph(sources, "repo", 1, 0);
+  expect(graph.schemaVersion).toBe(1);
+  expect(graph.analyzerVersion).toBe("m2-ts-2");
+  expect(graph.edges.map((edge) => edge.kind)).toEqual([
+    "imports",
+    "reexports",
+  ]);
+  expect(
+    graph.edges.every((edge) => edge.resolution === "resolved_static"),
+  ).toBe(true);
+  expect(graph.diagnostics).toEqual([
+    { path: "src/main.ts", code: "UNSUPPORTED_IMPORT_SYNTAX", line: 2 },
+  ]);
+  expect(graph.partial).toBe(true);
+  expect(buildGraph([...sources].reverse(), "repo", 1, 0)).toEqual(graph);
+});

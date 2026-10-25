@@ -6,7 +6,7 @@ export type Source = { path: string; bytes: Buffer };
 export class GraphLimitError extends Error {}
 export type Graph = {
   schemaVersion: 1;
-  analyzerVersion: "m2-ts-1";
+  analyzerVersion: "m2-ts-2";
   manifest: string;
   repositoryId: string;
   revision: number;
@@ -147,6 +147,15 @@ export function buildGraph(
       });
     }
     for (const statement of ast.statements) {
+      if (ts.isImportEqualsDeclaration(statement)) {
+        diagnostics.push({
+          path,
+          code: "UNSUPPORTED_IMPORT_SYNTAX",
+          line:
+            ast.getLineAndCharacterOfPosition(statement.getStart(ast)).line + 1,
+        });
+        continue;
+      }
       if (
         !ts.isImportDeclaration(statement) &&
         !ts.isExportDeclaration(statement)
@@ -253,7 +262,7 @@ export function buildGraph(
   );
   return {
     schemaVersion: 1,
-    analyzerVersion: "m2-ts-1",
+    analyzerVersion: "m2-ts-2",
     manifest,
     repositoryId,
     revision,
