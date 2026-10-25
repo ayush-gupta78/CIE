@@ -1,0 +1,4 @@
+pnpm-lock.yaml
+prompts/
+dist/
+node_modules/

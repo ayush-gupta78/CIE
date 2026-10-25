@@ -1,0 +1,20 @@
+# Agent instructions and handoff packages
+/prompts/
+
+# Dependencies and build outputs
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Editor and OS artifacts
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,38 @@
+/* CIE M0 starter tokens. Approximate implementation starting values,
+ * NOT sampled from the referenced UI screenshots. Adjust centrally during review.
+ * Original Expedition 33-inspired mood; no copied game assets. */
+:root {
+  color-scheme: dark;
+  --cie-bg: #09090a;
+  --cie-stage: #050506;
+  --cie-panel: #141316;
+  --cie-border: #353137;
+  --cie-text: #ede8df;
+  --cie-text-muted: #aaa39a;
+  --cie-accent: #baa07a;
+  --cie-accent-active: #d6bd94;
+  --cie-danger: #d18e86;
+  --cie-success: #97b19c;
+  --cie-font-display:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --cie-font-ui:
+    Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cie-font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --cie-radius-sm: 4px;
+  --cie-radius-md: 8px;
+  --cie-focus: 2px solid var(--cie-accent-active);
+  --cie-transition: 180ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cie-transition: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
