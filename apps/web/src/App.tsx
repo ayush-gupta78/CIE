@@ -1,4 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useLocalHealth } from "./useLocalHealth";
 import { Workspace } from "./Workspace";
 import { Settings } from "./Settings";
@@ -24,16 +31,19 @@ export function App() {
   );
   const [selectedFile, setSelectedFile] = useState<Entry | null>(null);
   const [startupError, setStartupError] = useState("");
+  const previousConnection = useRef(connection);
+  const selectionGeneration = useRef(0);
   const loadSelection = useCallback(async (signal: AbortSignal) => {
+    const current = ++selectionGeneration.current;
     try {
       const result = await currentRepository(signal);
-      if (!signal.aborted) {
+      if (!signal.aborted && selectionGeneration.current === current) {
         setRepository(result);
         setSelectedFile(null);
         setStartupError("");
       }
     } catch (error) {
-      if (!signal.aborted)
+      if (!signal.aborted && selectionGeneration.current === current)
         setStartupError(
           error instanceof Error ? error.message : "Local API unavailable.",
         );
@@ -45,12 +55,37 @@ export function App() {
     void loadSelection(controller.signal);
     return () => controller.abort();
   }, [connection, repository, loadSelection]);
+  useEffect(() => {
+    if (
+      connection === "connected" &&
+      previousConnection.current === "disconnected"
+    ) {
+      // A restarted local server loses its in-memory selection. Verify before showing old data.
+      setRepository(undefined);
+    }
+    previousConnection.current = connection;
+  }, [connection]);
+  useEffect(() => {
+    if (connection !== "connected") return;
+    const controller = new AbortController();
+    const verify = () => {
+      if (document.visibilityState === "visible")
+        void loadSelection(controller.signal);
+    };
+    window.addEventListener("focus", verify);
+    return () => {
+      controller.abort();
+      window.removeEventListener("focus", verify);
+    };
+  }, [connection, loadSelection]);
   const onChange = (next: Selection | null) => {
+    selectionGeneration.current++;
     setRepository(next);
     setSelectedFile(null);
     setStartupError("");
   };
   const onStale = useCallback(() => {
+    selectionGeneration.current++;
     setRepository(undefined);
     setSelectedFile(null);
   }, []);
@@ -185,6 +220,7 @@ export function App() {
                 repository={repository}
                 connection={connection}
                 onOpenRepository={() => setPage("repository")}
+                onStale={onStale}
               />
             </Suspense>
           ) : (

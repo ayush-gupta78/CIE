@@ -32,12 +32,14 @@ const palette = [
 ];
 export function groupColor(path: string): string {
   let hash = 0;
-  for (const char of path.split("/")[0])
+  for (const char of path.split("/").slice(0, 2).join("/"))
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   return palette[hash % palette.length];
 }
 export function projectGraph(graph: Graph): SceneModel {
-  const files = graph.files;
+  const files = [...graph.files].sort((a, b) =>
+    a.path.localeCompare(b.path, "en"),
+  );
   const ids = new Set(files.map((file) => file.id));
   const groups = new Map<string, FileNode[]>();
   const incoming = new Map(files.map((file) => [file.id, [] as FileEdge[]]));
@@ -98,23 +100,30 @@ export function layoutGraph(model: SceneModel): {
     radius: number;
     color: string;
   }[] = [];
-  const offset = (index: number, count: number, step: number): Point => [
-    ((index % 5) - (Math.min(count, 5) - 1) / 2) * step,
-    ((Math.floor(index / 5) % 5) -
-      (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
-      step,
-    (Math.floor(index / 25) - (Math.ceil(count / 25) - 1) / 2) * step +
-      (count > 1 ? ((index % 3) - 1) * step * 0.18 : 0),
-  ];
+  const offset = (index: number, count: number, step: number): Point =>
+    count === 1
+      ? [0, 0, 0]
+      : [
+          ((index % 5) - (Math.min(count, 5) - 1) / 2) * step * 0.82,
+          ((Math.floor(index / 5) % 5) -
+            (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
+            step +
+            ((index % 2) - 0.5) * step * 0.4,
+          (Math.floor(index / 25) - (Math.ceil(count / 25) - 1) / 2) * step +
+            ((index % 3) - 1) * step * 0.26,
+        ];
   const plus = (a: Point, b: Point): Point => [
     a[0] + b[0],
     a[1] + b[1],
     a[2] + b[2],
   ];
-  const fileOffset = (index: number): Point => [
-    ((index % 4) - 1.5) * 1.35,
-    ((Math.floor(index / 4) % 4) - 1.5) * 1.35,
-    Math.floor(index / 16) * 1.35 + ((index % 3) - 1) * 0.32,
+  const fileOffset = (index: number, count: number): Point => [
+    ((index % 4) - (Math.min(count, 4) - 1) / 2) * 2.1,
+    ((Math.floor(index / 4) % 4) -
+      (Math.min(Math.ceil(count / 4), 4) - 1) / 2) *
+      2.4,
+    (Math.floor(index / 16) - (Math.ceil(count / 16) - 1) / 2) * 2.2 +
+      ((index % 3) - 1) * 0.8,
   ];
   const roots = new Map<string, Map<string, Group[]>>();
   for (const group of model.groups) {
@@ -134,23 +143,22 @@ export function layoutGraph(model: SceneModel): {
         .map(([name, leaves]) => {
           const local = leaves.map((group, index) => ({
             group,
-            position: offset(index, leaves.length, 4),
+            position: offset(index, leaves.length, 9),
           }));
           const radius =
             Math.max(
               5,
               ...local.flatMap(({ group, position }) =>
                 group.files.map((_, i) =>
-                  Math.hypot(...plus(position, fileOffset(i))),
+                  Math.hypot(
+                    ...plus(position, fileOffset(i, group.files.length)),
+                  ),
                 ),
               ),
             ) + 4;
           return { path: name, leaves: local, radius };
         });
-      const moduleRadii = children
-        .map((child) => child.radius)
-        .sort((a, b) => b - a);
-      const step = moduleRadii[0] + (moduleRadii[1] ?? 0) + 8;
+      const step = Math.max(19, ...children.map((child) => child.radius * 1.3));
       const placed = children.map((child, index) => ({
         ...child,
         position: offset(index, children.length, step),
@@ -164,12 +172,10 @@ export function layoutGraph(model: SceneModel): {
         ) + 4;
       return { path, children: placed, radius };
     });
-  const rootRadii = rootLayouts
-    .map((root) => root.radius)
-    .sort((a, b) => b - a);
-  const rootStep = rootRadii.length
-    ? rootRadii[0] + (rootRadii[1] ?? 0) + 12
-    : 0;
+  const rootStep = Math.max(
+    25,
+    ...rootLayouts.map((root) => root.radius * 1.2),
+  );
   rootLayouts.forEach((root, rootIndex) => {
     const rootPosition = offset(rootIndex, rootLayouts.length, rootStep);
     if (
@@ -206,7 +212,10 @@ export function layoutGraph(model: SceneModel): {
         const position = plus(modulePosition, local);
         groups.push({ path: group.path, position, color: group.color });
         group.files.forEach((file, index) =>
-          positions.set(file.id, plus(position, fileOffset(index))),
+          positions.set(
+            file.id,
+            plus(position, fileOffset(index, group.files.length)),
+          ),
         );
       });
     });
@@ -263,5 +272,5 @@ export function homeDistance(
         Math.max(Math.abs(right) / tanHorizontal, Math.abs(up) / tanVertical),
     );
   }
-  return distance * 1.16 + 3;
+  return distance * 1.08 + 2;
 }

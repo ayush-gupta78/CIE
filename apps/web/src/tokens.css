@@ -1,16 +1,14 @@
-/* CIE M0 starter tokens. Approximate implementation starting values,
- * NOT sampled from the referenced UI screenshots. Adjust centrally during review.
- * Original Expedition 33-inspired mood; no copied game assets. */
+/* CIE local workspace: corrected M3 palette from the approved references. */
 :root {
   color-scheme: dark;
-  --cie-bg: #09090a;
-  --cie-stage: #050506;
-  --cie-panel: #141316;
-  --cie-border: #353137;
-  --cie-text: #ede8df;
-  --cie-text-muted: #aaa39a;
-  --cie-accent: #baa07a;
-  --cie-accent-active: #d6bd94;
+  --cie-bg: #07090c;
+  --cie-stage: #080c11;
+  --cie-panel: #0d1117;
+  --cie-border: #343531;
+  --cie-text: #ece6d9;
+  --cie-text-muted: #a0a5aa;
+  --cie-accent: #c4aa79;
+  --cie-accent-active: #f3d4a0;
   --cie-danger: #d18e86;
   --cie-success: #97b19c;
   --cie-font-display:

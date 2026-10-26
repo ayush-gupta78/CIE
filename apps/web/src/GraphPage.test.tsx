@@ -107,7 +107,9 @@ it("offers explicit analysis, then syncs search, file list and graph-only inspec
     "services/",
   );
   const list = screen.getByRole("list", { name: "Graph files" });
-  expect(within(list).getAllByRole("button")).toHaveLength(1);
+  expect(
+    within(list).getByRole("button", { name: "Collapse services" }),
+  ).toBeTruthy();
   await user.click(
     within(list).getByRole("button", { name: /services\/entry.ts/ }),
   );
@@ -175,6 +177,9 @@ it("preserves the selected graph through routine health checks", async () => {
   );
   await waitFor(() =>
     expect(screen.getByText(/2 files.*1 verified connection/)).toBeTruthy(),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Expand services" }),
   );
   await userEvent.click(
     within(screen.getByRole("list", { name: "Graph files" })).getByRole(
@@ -427,4 +432,88 @@ it("finishes an analysis that spans a routine health check", async () => {
   expect(
     screen.getByRole("button", { name: "Re-analyze" }).hasAttribute("disabled"),
   ).toBe(false);
+});
+
+it.each(["NO_REPOSITORY_SELECTED", "STALE_REPOSITORY"])(
+  "invalidates an obsolete selection on %s and offers repository recovery",
+  async (code) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(reply({ error: { code } }, 409)),
+    );
+    const stale = vi.fn();
+    const open = vi.fn();
+    const view = render(
+      <GraphPage
+        repository={repo}
+        connection="connected"
+        onOpenRepository={open}
+        onStale={stale}
+      />,
+    );
+    await waitFor(() => expect(stale).toHaveBeenCalledOnce());
+    view.rerender(
+      <GraphPage
+        repository={null}
+        connection="connected"
+        onOpenRepository={open}
+        onStale={stale}
+      />,
+    );
+    expect(screen.getByText("No repository selected.")).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open repository" }),
+    );
+    expect(open).toHaveBeenCalledOnce();
+  },
+);
+
+it("keeps the file explorer accessible when a narrow-layout panel opens", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
+  const user = userEvent.setup();
+  render(
+    <GraphPage
+      repository={repo}
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByText(/2 files.*1 verified connection/)).toBeTruthy(),
+  );
+  await user.click(screen.getByRole("button", { name: "Files (2)" }));
+  expect(
+    screen
+      .getByRole("button", { name: "Files (2)" })
+      .getAttribute("aria-expanded"),
+  ).toBe("true");
+  expect(screen.getByRole("button", { name: "Expand services" })).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Inspector" }));
+  expect(
+    screen
+      .getByRole("button", { name: "Inspector" })
+      .getAttribute("aria-expanded"),
+  ).toBe("true");
+});
+
+it("recognizes NO_GRAPH after another tab switches the selected repository", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url.endsWith("/graph")
+        ? reply({ error: { code: "NO_GRAPH" } }, 409)
+        : reply({ ...repo, repositoryId: "r2" }),
+    ),
+  );
+  const stale = vi.fn();
+  render(
+    <GraphPage
+      repository={repo}
+      connection="connected"
+      onOpenRepository={() => {}}
+      onStale={stale}
+    />,
+  );
+  await waitFor(() => expect(stale).toHaveBeenCalledOnce());
+  expect(screen.queryByText(/2 files.*1 verified connection/)).toBeNull();
 });

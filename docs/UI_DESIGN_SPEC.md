@@ -120,7 +120,7 @@ This document records the **explicit corrections that can be confirmed from the 
 
 ## 8. M3 owner-approved reference crosswalk (2026-10-26)
 
-The owner approved seven reference screenshots. Their original image files are not in the M3 archive, so this records the supplied text crosswalk rather than claiming pixel sampling:
+Historical M3 note: the first M3 handoff had only a text crosswalk. The owner subsequently supplied all seven original PNGs and `FILE_GRAPH_3D_PROTOTYPE.html` in the ignored `prompts/m3/correction/assets/`. The correction uses those exact references, not screenshot backgrounds. No reference asset is committed.
 
 | Screenshot                                             | M3 use                                                                            | Deferred scope                                                    |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -130,4 +130,4 @@ The owner approved seven reference screenshots. Their original image files are n
 | 4 — spatial file relationships                         | True perspective orbit, file-to-file import direction, inspector clarity          | Functional 2D mode (M4)                                           |
 | 5–7 — source workspace, landing and inspector concepts | Restrained typography/framing only                                                | Code/AI/advanced intelligence (M5–M7), unrelated landing redesign |
 
-M3 keeps CIE identity and the existing predominantly black shell. The graph itself is data-driven, with muted path-group colors, file labels and verified edges; no mock project labels, fantasy characters, kingdom scenery or remote assets. The M4 button remains visibly disabled. Actual visual fidelity against the unavailable image originals remains for owner review.
+M3 keeps CIE identity. Screens 02–03 are the primary targets for the dark, spatial, grouped file composition; 01 and 04 guide paths, tree, toolbar, legend and inspector. Screens 05–07 set the long-term editorial mood, not permission for source/AI/landing features. The HTML prototype informs panel hierarchy and controls only; its 2D Canvas and fictional graph data are not production components. The corrected implementation uses genuine perspective WebGL, directory-derived 3D grouping, evidence-backed directed lines, collision-capped filename chips, selected/neighbor priority and full paths outside the scene. The near-black stage and slender gold accents are approximate design interpretations, not a pixel-perfect recreation of concept art. M4 2D, M5 metrics, M6 source view and M7 AI remain deferred. M3 is implemented, awaiting independent owner review.

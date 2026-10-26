@@ -173,6 +173,12 @@ it("nests real leaf folders inside module and major-root zones", () => {
   expect(layout.zones.map((zone) => zone.path)).toEqual(
     expect.arrayContaining(["apps", "apps/web", "apps/server", "shared"]),
   );
+  expect(layout.zones.find((zone) => zone.path === "apps/web")?.color).not.toBe(
+    layout.zones.find((zone) => zone.path === "apps/server")?.color,
+  );
+  expect(
+    new Set(layout.groups.map((group) => group.position[1])).size,
+  ).toBeGreaterThan(1);
   const point = (path: string) =>
     layout.groups.find((group) => group.path === path)!.position;
   const distance = (a: number[], b: number[]) =>
