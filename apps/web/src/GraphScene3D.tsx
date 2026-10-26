@@ -74,6 +74,14 @@ function CameraRig({
       homeDistance(
         [
           ...layout.positions.values(),
+          ...[...layout.positions.values()].map(
+            ([x, y, z]) =>
+              [
+                x,
+                y + Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 6.2,
+                z,
+              ] as Point,
+          ),
           ...layout.groups.map((group) => group.position),
         ],
         layout.center,
@@ -128,22 +136,17 @@ function CameraRig({
     if (!Number.isFinite(direction.lengthSq()) || direction.lengthSq() < 0.01)
       direction.set(...HOME_DIRECTION);
     const compact = aspectRef.current < 0.85;
-    const center =
-      cameraCommand === "reset"
-        ? new Vector3(
-            layout.center[0] + (compact ? 0 : layout.radius * 0.19),
-            layout.center[1],
-            layout.center[2],
-          )
-        : new Vector3(...layout.center);
+    const center = new Vector3(
+      layout.center[0] + (compact ? 0 : layout.radius * 0.24),
+      layout.center[1] + 2.5,
+      layout.center[2],
+    );
     controls.target.copy(center);
     camera.position
       .copy(center)
       .addScaledVector(
         direction,
-        cameraCommand === "reset" && !compact
-          ? homeRef.current * 0.76
-          : homeRef.current,
+        homeRef.current * (cameraCommand === "reset" && !compact ? 0.72 : 1.05),
       );
     controls.update();
     camera.updateProjectionMatrix();
@@ -478,9 +481,13 @@ function SpatialGraph({
             <Line
               points={[a, b]}
               color={color}
-              lineWidth={emphasized ? 1.8 : 0.65}
+              lineWidth={
+                selectedId && emphasized ? 2.4 : emphasized ? 1.8 : 0.65
+              }
               transparent
-              opacity={emphasized ? 0.76 : 0.15}
+              opacity={
+                selectedId && emphasized ? 0.9 : emphasized ? 0.76 : 0.15
+              }
             />
             {selectedId && emphasized && (
               <mesh position={arrow} quaternion={rotation}>
@@ -496,13 +503,13 @@ function SpatialGraph({
         if (!position) return null;
         const selected = file.id === selectedId,
           active = !selectedId || related.has(file.id);
-        const color =
-          file.status === "failed"
+        const color = selected
+          ? "#f4ce8b"
+          : file.status === "failed"
             ? "#b47670"
             : (colors.get(file.parent) ?? "#ba9a72");
-        const height = selected
-          ? nodeSize * 3.4
-          : nodeSize * (2.3 + (file.path.length % 3) * 0.4);
+        const height =
+          nodeSize * (selected ? 6.2 : 3.4 + (file.path.length % 3) * 0.8);
         return (
           <group key={file.id} position={position}>
             <mesh
@@ -520,19 +527,39 @@ function SpatialGraph({
                 onHover("");
               }}
             >
-              <boxGeometry args={[nodeSize * 0.95, height, nodeSize * 0.95]} />
+              <boxGeometry args={[nodeSize * 0.72, height, nodeSize * 0.72]} />
               <meshStandardMaterial
                 color={color}
                 emissive={color}
-                emissiveIntensity={selected ? 1.4 : active ? 0.6 : 0.1}
+                emissiveIntensity={selected ? 1.5 : active ? 0.65 : 0.1}
                 transparent
-                opacity={active ? 0.92 : 0.34}
-                roughness={0.35}
-                metalness={0.42}
+                opacity={active ? 0.7 : 0.25}
+                roughness={0.22}
+                metalness={0.65}
+              />
+            </mesh>
+            <mesh>
+              <boxGeometry args={[nodeSize * 0.82, height, nodeSize * 0.82]} />
+              <meshBasicMaterial
+                color={color}
+                wireframe
+                transparent
+                opacity={active ? 0.37 : 0.08}
+                depthWrite={false}
+              />
+            </mesh>
+            <mesh position={[0, height * 0.16, 0]}>
+              <boxGeometry
+                args={[nodeSize * 0.16, height * 0.7, nodeSize * 0.16]}
+              />
+              <meshBasicMaterial
+                color={selected ? "#ffe2a8" : color}
+                transparent
+                opacity={active ? 0.72 : 0.12}
               />
             </mesh>
             <mesh position={[0, height / 2 + 0.08, 0]}>
-              <boxGeometry args={[nodeSize * 1.18, 0.12, nodeSize * 1.18]} />
+              <boxGeometry args={[nodeSize * 0.98, 0.12, nodeSize * 0.98]} />
               <meshBasicMaterial
                 color={selected ? "#ffdfab" : color}
                 transparent

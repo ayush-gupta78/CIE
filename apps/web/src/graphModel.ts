@@ -31,6 +31,14 @@ const palette = [
   "#83a5ad",
 ];
 export function groupColor(path: string): string {
+  const parts = path.toLowerCase().split("/");
+  const module = parts[1] ?? parts[0];
+  if (/^(web|frontend|client|ui)$/.test(module)) return "#87b7ee";
+  if (/^(server|backend|api)$/.test(module)) return "#e0ae69";
+  if (/^(shared|common)$/.test(module)) return "#71cabc";
+  if (/^(tests?|specs?)$/.test(module)) return "#a48acf";
+  if (/^(docs?|documentation)$/.test(module)) return "#bbc4c6";
+  if (/^(scripts?|tools?)$/.test(module)) return "#a8cc9a";
   let hash = 0;
   for (const char of path.split("/").slice(0, 2).join("/"))
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;

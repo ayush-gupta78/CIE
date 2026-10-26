@@ -25,24 +25,33 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("renders an honest empty workspace with Graph navigation and disabled later features", async () => {
+it("renders an honest archive landing with a real navigation path and deferred features", async () => {
   render(<App />);
   await waitFor(() =>
-    expect(screen.getByText("No repository loaded.")).toBeTruthy(),
+    expect(
+      screen.getByRole("heading", { name: "No repository selected" }),
+    ).toBeTruthy(),
   );
-  expect(screen.getByText("No file selected")).toBeTruthy();
   const graph = screen.getByRole("button", {
-    name: "Graph",
+    name: "3D atlas",
   }) as HTMLButtonElement;
   expect(graph.disabled).toBe(false);
-  for (const label of ["Insights, available in M5", "AI, available in M7"]) {
+  for (const label of [
+    "Findings M5",
+    "Assistant M7",
+    "Import analysis snapshot, not available yet",
+  ]) {
     expect(
       (screen.getByRole("button", { name: label }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
   }
   expect(
-    (screen.getByRole("button", { name: "3D" }) as HTMLButtonElement).disabled,
+    (
+      screen.getByRole("button", {
+        name: /Continue Current Session/,
+      }) as HTMLButtonElement
+    ).disabled,
   ).toBe(true);
   await waitFor(() =>
     expect(screen.getAllByText("Connected").length).toBeGreaterThan(0),
@@ -71,30 +80,88 @@ it("shows offline status and reconnects on retry", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
-it("supports keyboard navigation to Settings and back without enabling future features", async () => {
+it("supports keyboard navigation through live links while skipping deferred destinations", async () => {
   const user = userEvent.setup();
   render(<App />);
-  const workspace = screen.getByRole("button", { name: "Workspace" });
-  await user.tab(); // top-bar Settings
+  const workspace = screen.getByRole("button", { name: "Archive" });
   await user.tab();
   expect(workspace).toBe(document.activeElement);
   await user.tab();
   expect(screen.getByRole("button", { name: "Repository" })).toBe(
     document.activeElement,
   );
-  await user.tab(); // Graph is now available
-  expect(screen.getByRole("button", { name: "Graph" })).toBe(
+  await user.tab();
+  expect(screen.getByRole("button", { name: "3D atlas" })).toBe(
     document.activeElement,
   );
-  await user.tab(); // disabled milestones are skipped
-  expect(
-    screen.getByRole("navigation").querySelector('[aria-current="page"]'),
-  ).not.toBeNull();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Settings" })).toBe(
+    document.activeElement,
+  );
   await user.keyboard("{Enter}");
   expect(screen.getByRole("heading", { name: "Settings." })).toBeTruthy();
   await user.click(workspace);
   await waitFor(() =>
-    expect(screen.getByText("No repository loaded.")).toBeTruthy(),
+    expect(
+      screen.getByRole("heading", { name: "No repository selected" }),
+    ).toBeTruthy(),
   );
   expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+});
+
+it("rechecks the in-memory repository after a disconnected to checking to connected recovery", async () => {
+  let online = true;
+  let selected = true;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/v1/health") {
+        if (!online) throw new Error("offline");
+        return {
+          ok: true,
+          json: async () => ({ status: "ok", mode: "local", version: "0.1.0" }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () =>
+          selected
+            ? {
+                selected: true,
+                repositoryId: "r1",
+                revision: 1,
+                rootName: "fixture",
+              }
+            : { selected: false },
+      };
+    }),
+  );
+  const user = userEvent.setup();
+  render(<App />);
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { name: "fixture" })).toBeTruthy(),
+  );
+  online = false;
+  await user.click(screen.getByRole("button", { name: "Retry connection" }));
+  await waitFor(() =>
+    expect(screen.getAllByText("Disconnected").length).toBeGreaterThan(0),
+  );
+  online = true;
+  selected = false;
+  await user.click(screen.getByRole("button", { name: "Retry connection" }));
+  await waitFor(() =>
+    expect(screen.getAllByText("Connected").length).toBeGreaterThan(0),
+  );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("heading", { name: "No repository selected" }),
+    ).toBeTruthy(),
+  );
+  expect(
+    (
+      screen.getByRole("button", {
+        name: /Continue Current Session/,
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
 });

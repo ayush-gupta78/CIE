@@ -1,4 +1,5 @@
 import type { Selection } from "./repositoryApi";
+import { Crest } from "./Crest";
 
 export function Workspace({
   repository,
@@ -10,88 +11,123 @@ export function Workspace({
   onOpenGraph: () => void;
 }) {
   return (
-    <>
-      <div className="intro">
-        <p className="kicker">Your workspace</p>
-        <h1>
-          Understand how
+    <section className="archive-landing" aria-labelledby="archive-title">
+      <div className="archive-art" aria-hidden="true" />
+      <div className="archive-hero">
+        <div className="archive-hero-line" aria-hidden="true">
+          <Crest />
+        </div>
+        <h1 id="archive-title">
+          The architecture
           <br />
-          your code connects.
+          behind the code.
         </h1>
-        <p className="intro-copy">
-          Browse real files, then analyze their static connections in the 3D
-          Graph.
+        <p className="archive-hero-subtitle">
+          CIE / AI Codebase Intelligence Engine
         </p>
+        <p className="archive-hero-mission">
+          Open a local repository. Follow the verified paths between its files.
+        </p>
+      </div>
+      <div className="archive-actions" aria-label="Begin exploring">
         <button
           type="button"
-          className="workspace-link"
+          className="archive-action-card archive-action-open"
           onClick={onOpenRepository}
         >
-          {repository ? "View repository files" : "Open a repository"}
-        </button>
-        {repository && (
-          <button
-            type="button"
-            className="workspace-link"
-            onClick={onOpenGraph}
-          >
-            Explore 3D Graph
-          </button>
-        )}
-      </div>
-      <section className="workspace" aria-label="Graph workspace">
-        <div className="workspace-toolbar">
-          <span>
-            Visualization space{" "}
-            <span className="toolbar-caption">/ Open Graph to analyze</span>
+          <span className="archive-action-icon" aria-hidden="true">
+            <Crest />
           </span>
-          <div
-            className="view-modes"
-            role="group"
-            aria-label="Graph view modes"
-          >
-            <button
-              type="button"
-              disabled={!repository}
-              onClick={onOpenGraph}
-              title={repository ? "Open 3D Graph" : "Open a repository first"}
-            >
-              3D
-            </button>
-            <button type="button" disabled title="2D view available in M4">
-              2D <small>M4</small>
-            </button>
-          </div>
+          <strong>
+            Open Local
+            <br />
+            Repository
+          </strong>
+          <span>Select a folder on this device for private exploration.</span>
+          <span className="archive-action-arrow" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="archive-action-card archive-action-resume"
+          onClick={onOpenGraph}
+          disabled={!repository}
+          title={
+            repository
+              ? "Continue exploring the selected repository"
+              : "Select a repository first"
+          }
+        >
+          <span className="archive-action-icon" aria-hidden="true">
+            <Crest />
+          </span>
+          <strong>
+            Continue
+            <br />
+            Current Session
+          </strong>
+          <span>
+            {repository
+              ? `Explore ${repository.rootName} in the 3D atlas.`
+              : "Select a repository to continue."}
+          </span>
+          <span className="archive-action-arrow" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="archive-action-card archive-action-deferred"
+          disabled
+          title="Analysis snapshot import is not available yet"
+          aria-label="Import analysis snapshot, not available yet"
+        >
+          <span className="archive-action-icon" aria-hidden="true">
+            <Crest />
+          </span>
+          <strong>
+            Import Analysis
+            <br />
+            Snapshot
+          </strong>
+          <span>Not available in the local M3 release.</span>
+          <span className="archive-action-arrow" aria-hidden="true" />
+        </button>
+      </div>
+      <aside className="archive-current" aria-label="Current repository">
+        <div className="archive-current-heading">
+          <span>Current repository</span>
+          <Crest />
         </div>
-        <div className="stage">
-          <div className="stage-corner stage-corner-top" aria-hidden="true" />
-          <div className="empty-state">
-            <div className="empty-rule" aria-hidden="true" />
-            <p className="empty-overline">An open canvas</p>
+        {repository ? (
+          <>
+            <div className="archive-current-art" aria-hidden="true" />
+            <h2>{repository.rootName}</h2>
+            <p>Selected on this device · revision {repository.revision}</p>
+            <div className="archive-current-rule" />
+            <button type="button" onClick={onOpenGraph}>
+              Enter the 3D atlas
+            </button>
+          </>
+        ) : (
+          <>
+            <Crest className="archive-current-empty-crest" />
             <h2>
-              {repository
-                ? "No graph generated."
-                : repository === undefined
-                  ? "Repository status unknown."
-                  : "No repository loaded."}
+              {repository === undefined
+                ? "Checking local selection"
+                : "No repository selected"}
             </h2>
             <p>
-              {repository
-                ? "Open Graph to analyze supported source files and explore their verified connections in 3D."
-                : repository === undefined
-                  ? "Check the local API status, then open a repository to explore files."
-                  : "Open a local repository to browse files. Then use Graph for 3D dependency exploration."}
+              Nothing is scanned until you choose a local folder. Recent-project
+              history is not stored.
             </p>
-          </div>
-          <div
-            className="stage-corner stage-corner-bottom"
-            aria-hidden="true"
-          />
-          <span className="stage-footnote">
-            The graph begins with real files.
-          </span>
-        </div>
-      </section>
-    </>
+            <button type="button" onClick={onOpenRepository}>
+              Choose a repository
+            </button>
+          </>
+        )}
+      </aside>
+      <div className="archive-landing-foot">
+        Local by default <span aria-hidden="true" /> Verified file relationships{" "}
+        <span aria-hidden="true" /> No source upload
+      </div>
+    </section>
   );
 }

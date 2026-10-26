@@ -3,11 +3,14 @@ import { analyzeRepository, getGraph, type Graph } from "./graphApi";
 import { layoutGraph, projectGraph } from "./graphModel";
 import { GraphScene3D, supportsWebGL } from "./GraphScene3D";
 import { GraphFileTree } from "./GraphFileTree";
+import { GraphWorkbench, GraphNeighborhood } from "./GraphWorkbench";
+import { FileDetail } from "./FileDetail";
 import { ApiError, currentRepository, type Selection } from "./repositoryApi";
 import type { Connection } from "./useLocalHealth";
 
 type Props = {
   repository: Selection | null | undefined;
+  initialPath?: string | null;
   connection: Connection;
   onOpenRepository: () => void;
   onStale?: () => void;
@@ -15,6 +18,7 @@ type Props = {
 
 export function GraphPage({
   repository,
+  initialPath,
   connection,
   onOpenRepository,
   onStale,
@@ -40,6 +44,8 @@ export function GraphPage({
   const [compactPanel, setCompactPanel] = useState<"files" | "details" | null>(
     null,
   );
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
   const fetchGeneration = useRef(0);
   const analysisGeneration = useRef(0);
   const controller = useRef<AbortController | null>(null);
@@ -55,6 +61,18 @@ export function GraphPage({
     graph.revision === repository.revision
       ? graph
       : null;
+  useEffect(() => {
+    if (!initialPath || !visibleGraph) return;
+    const file = visibleGraph.files.find((entry) => entry.path === initialPath);
+    if (file) {
+      setSelectedId(file.id);
+      setDetailOpen(true);
+    } else {
+      setSelectedId(null);
+      setDetailOpen(false);
+      setSearch(initialPath);
+    }
+  }, [initialPath, visibleGraph]);
 
   async function handleIdentityIssue(
     issue: unknown,
@@ -96,6 +114,7 @@ export function GraphPage({
       setSelectedId(null);
       setFocusId(null);
       setFocusModule(null);
+      setDetailOpen(false);
       setSearch("");
       setError("");
       setNoGraph(false);
@@ -251,13 +270,18 @@ export function GraphPage({
     setResetToken((value) => value + 1);
   };
   return (
-    <section className="graph-page" aria-labelledby="graph-heading">
+    <section
+      className={`graph-page ${detailOpen && selected ? "detail-open" : ""}`}
+      aria-labelledby="graph-heading"
+    >
       <div className="graph-heading">
         <div>
           <p className="kicker">
             Repository / {repository?.rootName ?? "Not selected"} / 3D graph
           </p>
-          <h1 id="graph-heading">File relationships</h1>
+          <h1 id="graph-heading">
+            {detailOpen && selected ? selected.name : "3D file atlas"}
+          </h1>
         </div>
         <span className="graph-repository-name" title={repository?.rootName}>
           {repository?.rootName ?? "No repository"}
@@ -293,7 +317,11 @@ export function GraphPage({
                 disabled={!visibleGraph}
               />
             </label>
-            <div className="graph-toolbar-actions">
+            <div
+              className="graph-mode-switch"
+              role="group"
+              aria-label="Graph view mode"
+            >
               <button
                 type="button"
                 aria-pressed="true"
@@ -309,35 +337,13 @@ export function GraphPage({
               >
                 2D <small>M4</small>
               </button>
-              <button
-                type="button"
-                aria-pressed={showAllLabels}
-                disabled={!visibleGraph}
-                onClick={() => setShowAllLabels((value) => !value)}
-              >
-                {showAllLabels ? "Key labels" : "All labels"}
-              </button>
-              <button
-                type="button"
-                disabled={!visibleGraph || webglUnavailable}
-                onClick={() => camera("fit")}
-              >
-                Fit view
-              </button>
-              <button
-                type="button"
-                disabled={!visibleGraph || webglUnavailable}
-                onClick={() => setOrbitToken((value) => value + 1)}
-              >
-                Rotate view
-              </button>
-              <button
-                type="button"
-                disabled={!visibleGraph || webglUnavailable}
-                onClick={() => camera("reset")}
-              >
-                Reset orientation
-              </button>
+            </div>
+            <div className="atlas-top-actions">
+              {detailOpen && (
+                <button type="button" onClick={() => setDetailOpen(false)}>
+                  Back to atlas
+                </button>
+              )}
               <button
                 type="button"
                 disabled={connection !== "connected" || analyzing || loading}
@@ -351,6 +357,17 @@ export function GraphPage({
               </button>
             </div>
           </div>
+          {initialPath &&
+            (!visibleGraph ||
+              !visibleGraph.files.some(
+                (entry) => entry.path === initialPath,
+              )) && (
+              <p className="atlas-unavailable-file" role="status">
+                {visibleGraph
+                  ? `${initialPath} is not in the supported M2 source graph. Use Repository for its filesystem metadata; source reading is planned for M6.`
+                  : `To inspect ${initialPath}, analyze this repository first. Only supported M2 source files have dependency evidence.`}
+              </p>
+            )}
           <div className="graph-compact-tabs" aria-label="Graph panels">
             <button
               type="button"
@@ -398,236 +415,420 @@ export function GraphPage({
               Local API is offline. Reconnect before analyzing a repository.
             </p>
           )}
-          <div
-            className={`graph-panels ${compactPanel ? `panel-${compactPanel}` : ""}`}
-          >
-            <section className="graph-files" aria-label="Graph file explorer">
-              <div className="graph-panel-title">
-                <span>Repository files</span>
-                <small>
-                  {filtered.length} / {visibleGraph?.files.length ?? 0}
-                </small>
-              </div>
-              <p className="graph-panel-note">
-                Analyzed source files only. Expand a folder or search for a
-                path.
-              </p>
-              {visibleGraph && (
-                <GraphFileTree
-                  files={visibleGraph.files}
-                  search={search}
-                  selectedId={selectedId}
-                  onSelect={focus}
-                  onFocusModule={(path) => {
-                    setFocusId(null);
-                    setFocusModule(path);
-                    setFocusToken((value) => value + 1);
-                  }}
-                />
-              )}
-              {visibleGraph && filtered.length === 0 && (
-                <p className="graph-panel-note">No matching analyzed files.</p>
-              )}
-            </section>
-            <div className="graph-stage" aria-label="3D file graph">
-              {visibleGraph &&
-              model &&
-              layout &&
-              visibleGraph.files.length > 0 ? (
-                webglUnavailable ? (
-                  <div className="graph-fallback" role="status">
-                    <h2>3D rendering unavailable.</h2>
-                    <p>
-                      WebGL is unavailable or its context was lost. Use the file
-                      explorer and relationship details to inspect this graph.
-                    </p>
-                    {supportsWebGL() && (
-                      <button
-                        type="button"
-                        className="graph-inspector-action"
-                        onClick={() => setWebglUnavailable(false)}
-                      >
-                        Retry 3D renderer
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <GraphScene3D
-                    model={model}
-                    layout={layout}
-                    selectedId={selectedId}
-                    onSelect={select}
-                    showAllLabels={showAllLabels}
-                    focusId={focusId}
-                    focusModule={focusModule}
-                    focusToken={focusToken}
-                    resetToken={resetToken}
-                    orbitToken={orbitToken}
-                    cameraCommand={cameraCommand}
-                    onHover={setHoverPath}
-                    onUnavailable={() => setWebglUnavailable(true)}
-                  />
-                )
-              ) : (
-                <div className="graph-stage-empty">
-                  <h2>
-                    {loading || analyzing
-                      ? "Reading real files…"
-                      : visibleGraph
-                        ? "No supported source files."
-                        : "A graph begins with source."}
-                  </h2>
-                  <p>
-                    {visibleGraph
-                      ? "This analysis found no supported TypeScript or JavaScript files."
-                      : "Run analysis after selecting a repository. No sample files are shown."}
-                  </p>
+          {detailOpen && selected && visibleGraph && model ? (
+            <FileDetail
+              graph={visibleGraph}
+              model={model}
+              file={selected}
+              onSelect={select}
+              onFocusModule={(path) => {
+                setDetailOpen(false);
+                setFocusId(null);
+                setFocusModule(path);
+                setFocusToken((value) => value + 1);
+              }}
+              onClose={() => setDetailOpen(false)}
+            />
+          ) : (
+            <div
+              className={`graph-panels ${compactPanel ? `panel-${compactPanel}` : ""}`}
+            >
+              <section className="graph-files" aria-label="Graph file explorer">
+                <div className="graph-panel-title">
+                  <span>Repository files</span>
+                  <small>
+                    {filtered.length} / {visibleGraph?.files.length ?? 0}
+                  </small>
                 </div>
-              )}
-              {hoverPath && (
-                <div className="graph-hover-path" role="status">
-                  {hoverPath}
-                </div>
-              )}
-              <div className="graph-stage-legend" aria-label="Graph legend">
-                <span>
-                  <i className="legend-out" /> Verified imports / re-exports:
-                  importer → referenced file
-                </span>
-                <span>
-                  <i className="legend-in" /> Gold: uses · Blue: referenced by
-                </span>
-              </div>
-            </div>
-            <aside className="graph-inspector" aria-label="Graph file details">
-              <div className="graph-panel-title">File relationships</div>
-              {selected && model ? (
-                <>
-                  <h2 title={selected.path}>{selected.name}</h2>
-                  <p className="graph-inspector-path">{selected.path}</p>
-                  <div className="graph-counts">
-                    <div>
-                      <strong>
-                        {model.outgoing.get(selected.id)?.length ?? 0}
-                      </strong>
-                      <span>Outgoing</span>
-                    </div>
-                    <div>
-                      <strong>
-                        {model.incoming.get(selected.id)?.length ?? 0}
-                      </strong>
-                      <span>Incoming</span>
-                    </div>
-                  </div>
-                  <dl>
-                    <dt>Type</dt>
-                    <dd>File · {selected.name.split(".").at(-1)}</dd>
-                    <dt>Language</dt>
-                    <dd>{selected.language}</dd>
-                    <dt>Parse status</dt>
-                    <dd>{selected.status}</dd>
-                  </dl>
-                  <button
-                    type="button"
-                    className="graph-inspector-action"
-                    onClick={() => focus(selected.id)}
-                    disabled={webglUnavailable}
-                  >
-                    Focus file
-                  </button>
-                  <button
-                    type="button"
-                    className="graph-inspector-action"
-                    onClick={() => setSelectedId(null)}
-                  >
-                    Clear selection
-                  </button>
-                  <h3>
-                    Outgoing / uses ·{" "}
-                    {model.outgoing.get(selected.id)?.length ?? 0}
-                  </h3>
-                  <ul>
-                    {model.outgoing.get(selected.id)?.map((edge) => (
-                      <li key={edge.id}>
-                        <button
-                          type="button"
-                          title={relatedFile(edge.to!)?.path}
-                          onClick={() => focus(edge.to!)}
-                        >
-                          {relatedFile(edge.to!)?.path}
-                        </button>
-                        <small>
-                          {edge.kind} · {edge.specifier} · {edge.evidence.path}:
-                          {edge.evidence.line}:{edge.evidence.column}
-                        </small>
-                      </li>
-                    ))}
-                  </ul>
-                  <h3>
-                    Incoming / referenced by ·{" "}
-                    {model.incoming.get(selected.id)?.length ?? 0}
-                  </h3>
-                  <ul>
-                    {model.incoming.get(selected.id)?.map((edge) => (
-                      <li key={edge.id}>
-                        <button
-                          type="button"
-                          title={relatedFile(edge.from)?.path}
-                          onClick={() => focus(edge.from)}
-                        >
-                          {relatedFile(edge.from)?.path}
-                        </button>
-                        <small>
-                          {edge.kind} · {edge.specifier} · {edge.evidence.path}:
-                          {edge.evidence.line}:{edge.evidence.column}
-                        </small>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
                 <p className="graph-panel-note">
-                  Select a file to trace its relationships.
+                  Analyzed source files only. Expand a folder or search for a
+                  path.
                 </p>
-              )}
-              {visibleGraph && (
-                <div className="graph-diagnostics">
-                  <h3>Coverage</h3>
-                  <p>
-                    {visibleGraph.partial
-                      ? "Partial analysis: some files or relations are unsupported."
-                      : "Static source analysis available."}
+                {visibleGraph && (
+                  <GraphFileTree
+                    files={visibleGraph.files}
+                    search={search}
+                    selectedId={selectedId}
+                    onSelect={focus}
+                    onFocusModule={(path) => {
+                      setFocusId(null);
+                      setFocusModule(path);
+                      setFocusToken((value) => value + 1);
+                    }}
+                  />
+                )}
+                {visibleGraph && filtered.length === 0 && (
+                  <p className="graph-panel-note">
+                    No matching analyzed files.
                   </p>
-                  <p>
-                    {visibleGraph.diagnostics.length} diagnostics ·{" "}
-                    {visibleGraph.counts.skipped} skipped
-                  </p>
-                  <ul>
-                    {visibleGraph.diagnostics
+                )}
+              </section>
+              <div className="graph-stage" aria-label="3D file graph">
+                <div className="atlas-stage-caption" aria-hidden="true">
+                  <span>Spatial source atlas</span>
+                  <strong>{repository.rootName}</strong>
+                </div>
+                {model && layout && layout.zones.length > 0 && (
+                  <div
+                    className="atlas-module-key"
+                    aria-label="Analyzed directory modules"
+                  >
+                    <span>Mapped directories</span>
+                    {layout.zones
+                      .filter(
+                        (zone) =>
+                          !layout.zones.some((child) =>
+                            child.path.startsWith(`${zone.path}/`),
+                          ),
+                      )
                       .slice(0, 6)
-                      .map((diagnostic, index) => (
-                        <li
-                          key={`${diagnostic.path}:${diagnostic.line ?? 0}:${diagnostic.code}:${index}`}
+                      .map((zone) => (
+                        <div
+                          key={zone.path}
+                          style={{ borderColor: zone.color }}
                         >
-                          {diagnostic.code} · {diagnostic.path}
-                          {diagnostic.line ? `:${diagnostic.line}` : ""}
+                          <i
+                            style={{ backgroundColor: zone.color }}
+                            aria-hidden="true"
+                          />
+                          {zone.path}
+                          <small>
+                            {
+                              model.files.filter((file) =>
+                                file.path.startsWith(`${zone.path}/`),
+                              ).length
+                            }{" "}
+                            files
+                          </small>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                {visibleGraph &&
+                model &&
+                layout &&
+                visibleGraph.files.length > 0 ? (
+                  webglUnavailable ? (
+                    <div className="graph-fallback" role="status">
+                      <h2>3D rendering unavailable.</h2>
+                      <p>
+                        WebGL is unavailable or its context was lost. Use the
+                        file explorer and relationship details to inspect this
+                        graph.
+                      </p>
+                      {supportsWebGL() && (
+                        <button
+                          type="button"
+                          className="graph-inspector-action"
+                          onClick={() => setWebglUnavailable(false)}
+                        >
+                          Retry 3D renderer
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <GraphScene3D
+                      model={model}
+                      layout={layout}
+                      selectedId={selectedId}
+                      onSelect={select}
+                      showAllLabels={showAllLabels}
+                      focusId={focusId}
+                      focusModule={focusModule}
+                      focusToken={focusToken}
+                      resetToken={resetToken}
+                      orbitToken={orbitToken}
+                      cameraCommand={cameraCommand}
+                      onHover={setHoverPath}
+                      onUnavailable={() => setWebglUnavailable(true)}
+                    />
+                  )
+                ) : (
+                  <div className="graph-stage-empty">
+                    <h2>
+                      {loading || analyzing
+                        ? "Reading real files…"
+                        : visibleGraph
+                          ? "No supported source files."
+                          : "A graph begins with source."}
+                    </h2>
+                    <p>
+                      {visibleGraph
+                        ? "This analysis found no supported TypeScript or JavaScript files."
+                        : "Run analysis after selecting a repository. No sample files are shown."}
+                    </p>
+                  </div>
+                )}
+                {hoverPath && (
+                  <div className="graph-hover-path" role="status">
+                    {hoverPath}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="atlas-tools-toggle"
+                  aria-expanded={controlsOpen}
+                  onClick={() => setControlsOpen((value) => !value)}
+                >
+                  Atlas controls
+                </button>
+                <div
+                  className={`atlas-stage-controls ${controlsOpen ? "open" : ""}`}
+                  aria-label="Atlas controls"
+                >
+                  <button
+                    type="button"
+                    disabled={!visibleGraph || webglUnavailable}
+                    onClick={() => camera("fit")}
+                  >
+                    Fit view
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selected || webglUnavailable}
+                    onClick={() => selected && focus(selected.id)}
+                  >
+                    Focus selected
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={showAllLabels}
+                    disabled={!visibleGraph}
+                    onClick={() => setShowAllLabels((value) => !value)}
+                  >
+                    {showAllLabels ? "Key labels" : "All labels"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!visibleGraph || webglUnavailable}
+                    onClick={() => setOrbitToken((value) => value + 1)}
+                  >
+                    Rotate view
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!visibleGraph || webglUnavailable}
+                    onClick={() => camera("reset")}
+                  >
+                    Reset orientation
+                  </button>
+                </div>
+                <div
+                  className="atlas-selected-card"
+                  aria-label="Selected file summary"
+                >
+                  {selected && model ? (
+                    <>
+                      <span>Selected file</span>
+                      <h2>{selected.name}</h2>
+                      <p title={selected.path}>{selected.path}</p>
+                      <dl>
+                        <dt>Language</dt>
+                        <dd>{selected.language}</dd>
+                        <dt>Outgoing</dt>
+                        <dd>{model.outgoing.get(selected.id)?.length ?? 0}</dd>
+                        <dt>Incoming</dt>
+                        <dd>{model.incoming.get(selected.id)?.length ?? 0}</dd>
+                      </dl>
+                      <button type="button" onClick={() => setDetailOpen(true)}>
+                        Open file details
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span>Atlas reading</span>
+                      <p>
+                        Choose a real file marker or a path in the explorer to
+                        trace its verified relationships.
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="graph-stage-legend" aria-label="Graph legend">
+                  <span>
+                    <i className="legend-out" /> Verified imports / re-exports:
+                    importer → referenced file
+                  </span>
+                  <span>
+                    <i className="legend-in" /> Gold: uses · Blue: referenced by
+                  </span>
+                </div>
+              </div>
+              {visibleGraph && model ? (
+                <GraphWorkbench
+                  graph={visibleGraph}
+                  model={model}
+                  selected={selected}
+                  onSelect={focus}
+                  onOpenDetail={() => setDetailOpen(true)}
+                />
+              ) : (
+                <section
+                  className="atlas-workbench"
+                  aria-label="File workbench"
+                >
+                  <div className="atlas-panel-heading">File context</div>
+                  <div className="atlas-workbench-empty">
+                    <h2>A repository makes the atlas.</h2>
+                    <p>
+                      Analyze supported local source files to reveal verified
+                      connections.
+                    </p>
+                  </div>
+                </section>
+              )}
+              <aside
+                className="graph-inspector"
+                aria-label="Graph file details"
+              >
+                <div className="graph-panel-title">File relationships</div>
+                {selected && model ? (
+                  <>
+                    <h2 title={selected.path}>{selected.name}</h2>
+                    <p className="graph-inspector-path">{selected.path}</p>
+                    <div className="graph-counts">
+                      <div>
+                        <strong>
+                          {model.outgoing.get(selected.id)?.length ?? 0}
+                        </strong>
+                        <span>Outgoing</span>
+                      </div>
+                      <div>
+                        <strong>
+                          {model.incoming.get(selected.id)?.length ?? 0}
+                        </strong>
+                        <span>Incoming</span>
+                      </div>
+                    </div>
+                    <dl>
+                      <dt>Type</dt>
+                      <dd>File · {selected.name.split(".").at(-1)}</dd>
+                      <dt>Language</dt>
+                      <dd>{selected.language}</dd>
+                      <dt>Parse status</dt>
+                      <dd>{selected.status}</dd>
+                    </dl>
+                    <button
+                      type="button"
+                      className="graph-inspector-action"
+                      onClick={() => focus(selected.id)}
+                      disabled={webglUnavailable}
+                    >
+                      Focus file
+                    </button>
+                    <button
+                      type="button"
+                      className="graph-inspector-action"
+                      onClick={() => setSelectedId(null)}
+                    >
+                      Clear selection
+                    </button>
+                    <h3>
+                      Outgoing / uses ·{" "}
+                      {model.outgoing.get(selected.id)?.length ?? 0}
+                    </h3>
+                    <ul>
+                      {model.outgoing.get(selected.id)?.map((edge) => (
+                        <li key={edge.id}>
+                          <button
+                            type="button"
+                            title={relatedFile(edge.to!)?.path}
+                            onClick={() => focus(edge.to!)}
+                          >
+                            {relatedFile(edge.to!)?.path}
+                          </button>
+                          <small>
+                            {edge.kind} · {edge.specifier} ·{" "}
+                            {edge.evidence.path}:{edge.evidence.line}:
+                            {edge.evidence.column}
+                          </small>
                         </li>
                       ))}
-                  </ul>
-                  {visibleGraph.diagnostics.length > 6 && (
-                    <p>
-                      {visibleGraph.diagnostics.length - 6} more diagnostics in
-                      the API response.
-                    </p>
-                  )}
-                  <p>
-                    External and unresolved imports are not drawn as verified
-                    links.
+                    </ul>
+                    <h3>
+                      Incoming / referenced by ·{" "}
+                      {model.incoming.get(selected.id)?.length ?? 0}
+                    </h3>
+                    <ul>
+                      {model.incoming.get(selected.id)?.map((edge) => (
+                        <li key={edge.id}>
+                          <button
+                            type="button"
+                            title={relatedFile(edge.from)?.path}
+                            onClick={() => focus(edge.from)}
+                          >
+                            {relatedFile(edge.from)?.path}
+                          </button>
+                          <small>
+                            {edge.kind} · {edge.specifier} ·{" "}
+                            {edge.evidence.path}:{edge.evidence.line}:
+                            {edge.evidence.column}
+                          </small>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="graph-panel-note">
+                    Select a file to trace its relationships.
                   </p>
-                </div>
+                )}
+                {visibleGraph && (
+                  <div className="graph-diagnostics">
+                    <h3>Coverage</h3>
+                    <p>
+                      {visibleGraph.partial
+                        ? "Partial analysis: some files or relations are unsupported."
+                        : "Static source analysis available."}
+                    </p>
+                    <p>
+                      {visibleGraph.diagnostics.length} diagnostics ·{" "}
+                      {visibleGraph.counts.skipped} skipped
+                    </p>
+                    <ul>
+                      {visibleGraph.diagnostics
+                        .slice(0, 6)
+                        .map((diagnostic, index) => (
+                          <li
+                            key={`${diagnostic.path}:${diagnostic.line ?? 0}:${diagnostic.code}:${index}`}
+                          >
+                            {diagnostic.code} · {diagnostic.path}
+                            {diagnostic.line ? `:${diagnostic.line}` : ""}
+                          </li>
+                        ))}
+                    </ul>
+                    {visibleGraph.diagnostics.length > 6 && (
+                      <p>
+                        {visibleGraph.diagnostics.length - 6} more diagnostics
+                        in the API response.
+                      </p>
+                    )}
+                    <p>
+                      External and unresolved imports are not drawn as verified
+                      links.
+                    </p>
+                  </div>
+                )}
+              </aside>
+              {model ? (
+                <GraphNeighborhood
+                  model={model}
+                  selected={selected}
+                  onSelect={focus}
+                />
+              ) : (
+                <aside
+                  className="atlas-neighborhood"
+                  aria-label="Dependency neighborhood"
+                >
+                  <div className="atlas-panel-heading">
+                    Dependency neighborhood
+                  </div>
+                  <p>Direct verified links appear after analysis.</p>
+                </aside>
               )}
-            </aside>
-          </div>
+            </div>
+          )}
           <p className="graph-control-hint">
             Drag to orbit · Right-drag or two fingers to pan · Scroll or pinch
             to zoom · Select a file to trace dependencies · / search · Esc

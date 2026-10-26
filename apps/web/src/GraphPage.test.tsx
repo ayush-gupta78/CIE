@@ -134,6 +134,86 @@ it("offers explicit analysis, then syncs search, file list and graph-only inspec
   ).toBe(true);
 });
 
+it("opens real M2 declarations in the detail scaffold and follows a directed dependency", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
+  const user = userEvent.setup();
+  render(
+    <GraphPage
+      repository={repo}
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByText(/2 files.*1 verified connection/)).toBeTruthy(),
+  );
+  const list = screen.getByRole("list", { name: "Graph files" });
+  await user.click(
+    within(list).getByRole("button", { name: /services\/entry.ts/ }),
+  );
+  const workbench = screen.getByRole("region", { name: "File workbench" });
+  expect(within(workbench).getByText("../shared/entry")).toBeTruthy();
+  expect(
+    within(workbench).getByText(/Source preview is planned for M6/),
+  ).toBeTruthy();
+  await user.click(
+    within(workbench).getByRole("button", { name: "Open file details" }),
+  );
+  const detail = screen.getByRole("region", { name: "File detail" });
+  expect(
+    within(detail).getByText("services/entry.ts", {
+      selector: ".archive-article-head p",
+    }),
+  ).toBeTruthy();
+  const notes = within(detail).getByRole("complementary", {
+    name: "File relationship notes",
+  });
+  await user.click(
+    within(notes).getByRole("button", { name: "shared/entry.ts" }),
+  );
+  expect(
+    within(detail).getByText("shared/entry.ts", {
+      selector: ".archive-article-head p",
+    }),
+  ).toBeTruthy();
+  expect(within(notes).getByText("Referenced by")).toBeTruthy();
+  await user.click(within(detail).getByRole("button", { name: "3D atlas" }));
+  expect(
+    screen.getByRole("complementary", { name: "Graph file details" })
+      .textContent,
+  ).toContain("shared/entry.ts");
+});
+
+it("resolves a repository-explorer path to the same file detail, without inventing unsupported files", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
+  const view = render(
+    <GraphPage
+      repository={repo}
+      initialPath="shared/entry.ts"
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole("region", { name: "File detail" })).toBeTruthy(),
+  );
+  expect(
+    screen.getByText("shared/entry.ts", {
+      selector: ".archive-article-head p",
+    }),
+  ).toBeTruthy();
+  view.rerender(
+    <GraphPage
+      repository={repo}
+      initialPath="unindexed/readme.md"
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  expect(screen.getByText(/not in the supported M2 source graph/)).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "File detail" })).toBeNull();
+});
+
 it("ignores an old graph response after a repository revision change", async () => {
   let resolveOld!: (value: ReturnType<typeof reply>) => void;
   const pending = new Promise<ReturnType<typeof reply>>((resolve) => {
@@ -177,9 +257,6 @@ it("preserves the selected graph through routine health checks", async () => {
   );
   await waitFor(() =>
     expect(screen.getByText(/2 files.*1 verified connection/)).toBeTruthy(),
-  );
-  await userEvent.click(
-    screen.getByRole("button", { name: "Expand services" }),
   );
   await userEvent.click(
     within(screen.getByRole("list", { name: "Graph files" })).getByRole(
@@ -381,7 +458,7 @@ it("ignores an old analysis response after a repository switch", async () => {
     ).toBeTruthy(),
   );
   expect(screen.queryByText(/2 files.*1 verified connection/)).toBeNull();
-  expect(screen.getByText("other")).toBeTruthy();
+  expect(screen.getAllByText("other").length).toBeGreaterThan(0);
 });
 
 it("finishes an analysis that spans a routine health check", async () => {
@@ -487,7 +564,9 @@ it("keeps the file explorer accessible when a narrow-layout panel opens", async 
       .getByRole("button", { name: "Files (2)" })
       .getAttribute("aria-expanded"),
   ).toBe("true");
-  expect(screen.getByRole("button", { name: "Expand services" })).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Collapse services" }),
+  ).toBeTruthy();
   await user.click(screen.getByRole("button", { name: "Inspector" }));
   expect(
     screen

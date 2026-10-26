@@ -10,6 +10,7 @@ import { useLocalHealth } from "./useLocalHealth";
 import { Workspace } from "./Workspace";
 import { Settings } from "./Settings";
 import { RepositoryPage } from "./RepositoryPage";
+import { Crest, NavGlyph } from "./Crest";
 
 import { currentRepository, type Entry, type Selection } from "./repositoryApi";
 
@@ -19,8 +20,9 @@ const GraphPage = lazy(() =>
 );
 
 const future = [
-  { label: "Insights", milestone: "M5" },
-  { label: "AI", milestone: "M7" },
+  { label: "2D Graph", milestone: "M4", icon: "graph" as const },
+  { label: "Analysis", milestone: "M5", icon: "analysis" as const },
+  { label: "Assistant", milestone: "M7", icon: "assistant" as const },
 ];
 
 export function App() {
@@ -30,8 +32,9 @@ export function App() {
     undefined,
   );
   const [selectedFile, setSelectedFile] = useState<Entry | null>(null);
+  const [initialFilePath, setInitialFilePath] = useState<string | null>(null);
   const [startupError, setStartupError] = useState("");
-  const previousConnection = useRef(connection);
+  const mustRevalidateSelection = useRef(false);
   const selectionGeneration = useRef(0);
   const loadSelection = useCallback(async (signal: AbortSignal) => {
     const current = ++selectionGeneration.current;
@@ -40,6 +43,7 @@ export function App() {
       if (!signal.aborted && selectionGeneration.current === current) {
         setRepository(result);
         setSelectedFile(null);
+        setInitialFilePath(null);
         setStartupError("");
       }
     } catch (error) {
@@ -56,14 +60,12 @@ export function App() {
     return () => controller.abort();
   }, [connection, repository, loadSelection]);
   useEffect(() => {
-    if (
-      connection === "connected" &&
-      previousConnection.current === "disconnected"
-    ) {
-      // A restarted local server loses its in-memory selection. Verify before showing old data.
+    if (connection === "disconnected") mustRevalidateSelection.current = true;
+    if (connection === "connected" && mustRevalidateSelection.current) {
+      // Health checks pass through "checking"; preserve the disconnect across it.
+      mustRevalidateSelection.current = false;
       setRepository(undefined);
     }
-    previousConnection.current = connection;
   }, [connection]);
   useEffect(() => {
     if (connection !== "connected") return;
@@ -82,12 +84,14 @@ export function App() {
     selectionGeneration.current++;
     setRepository(next);
     setSelectedFile(null);
+    setInitialFilePath(null);
     setStartupError("");
   };
   const onStale = useCallback(() => {
     selectionGeneration.current++;
     setRepository(undefined);
     setSelectedFile(null);
+    setInitialFilePath(null);
   }, []);
 
   const statusText =
@@ -98,15 +102,56 @@ export function App() {
         : "Disconnected";
 
   return (
-    <div className="shell">
+    <div className={`shell page-${page}`}>
       <header className="topbar">
         <div
           className="brand"
           aria-label="CIE, AI Codebase Intelligence Engine"
         >
-          <span className="brand-mark">CIE</span>
-          <span className="brand-name">Codebase intelligence</span>
+          <Crest className="brand-crest" />
+          <span className="brand-wordmark">
+            CIE<small>Codebase intelligence</small>
+          </span>
         </div>
+        <nav className="top-navigation" aria-label="Archive navigation">
+          <button
+            type="button"
+            aria-current={page === "workspace" ? "page" : undefined}
+            onClick={() => setPage("workspace")}
+          >
+            Archive
+          </button>
+          <button
+            type="button"
+            aria-current={page === "repository" ? "page" : undefined}
+            onClick={() => setPage("repository")}
+          >
+            Repository
+          </button>
+          <button
+            type="button"
+            aria-current={page === "graph" ? "page" : undefined}
+            onClick={() => {
+              setInitialFilePath(null);
+              setPage("graph");
+            }}
+          >
+            3D atlas
+          </button>
+          <button type="button" disabled title="Available in M5">
+            Findings <small>M5</small>
+          </button>
+          <button type="button" disabled title="Available in M7">
+            Assistant <small>M7</small>
+          </button>
+          <button
+            type="button"
+            aria-current={page === "settings" ? "page" : undefined}
+            onClick={() => setPage("settings")}
+          >
+            Settings
+          </button>
+        </nav>
         <span className="repository-label" title={repository?.rootName}>
           {repository?.rootName ??
             (repository === undefined
@@ -123,72 +168,79 @@ export function App() {
             <span className="status-dot" aria-hidden="true" />
             {statusText}
           </span>
-          <button
-            className="top-settings"
-            type="button"
-            onClick={() => setPage("settings")}
-          >
-            Settings
-          </button>
         </div>
       </header>
 
       <div className={`layout ${page === "graph" ? "graph-layout" : ""}`}>
-        <nav className="sidebar" aria-label="Primary navigation">
-          <div className="nav-heading">Navigate</div>
-          <button
-            type="button"
-            className={`nav-item ${page === "workspace" ? "active" : ""}`}
-            aria-current={page === "workspace" ? "page" : undefined}
-            onClick={() => setPage("workspace")}
-          >
-            Workspace
-          </button>
-          <button
-            type="button"
-            className={`nav-item ${page === "repository" ? "active" : ""}`}
-            aria-current={page === "repository" ? "page" : undefined}
-            onClick={() => setPage("repository")}
-          >
-            Repository
-          </button>
-          <button
-            type="button"
-            className={`nav-item ${page === "graph" ? "active" : ""}`}
-            aria-current={page === "graph" ? "page" : undefined}
-            onClick={() => setPage("graph")}
-          >
-            Graph
-          </button>
-          {future.map(({ label, milestone }) => (
+        {(page === "graph" || page === "settings") && (
+          <nav className="sidebar" aria-label="Primary navigation">
+            <div className="nav-heading">Explore the archive</div>
             <button
               type="button"
-              className="nav-item future"
-              key={label}
-              disabled
-              title={`Available in ${milestone}`}
-              aria-label={`${label}, available in ${milestone}`}
+              className="nav-item"
+              onClick={() => setPage("workspace")}
             >
-              <span>{label}</span>
-              <span className="milestone">{milestone}</span>
+              <NavGlyph name="home" /> Overview
             </button>
-          ))}
-          <div className="nav-bottom">
             <button
               type="button"
-              className={`nav-item ${page === "settings" ? "active" : ""}`}
-              aria-current={page === "settings" ? "page" : undefined}
-              onClick={() => setPage("settings")}
+              className="nav-item"
+              onClick={() => setPage("repository")}
             >
-              Settings
+              <NavGlyph name="repository" /> Repository
             </button>
-            <p>
-              Private by default.
-              <br />
-              Built for local exploration.
-            </p>
-          </div>
-        </nav>
+            <button
+              type="button"
+              className={`nav-item ${page === "graph" ? "active" : ""}`}
+              aria-current={page === "graph" ? "page" : undefined}
+              onClick={() => {
+                setInitialFilePath(null);
+                setPage("graph");
+              }}
+            >
+              <NavGlyph name="graph" /> 3D Map
+            </button>
+            {future.map(({ label, milestone, icon }) => (
+              <button
+                type="button"
+                className="nav-item future"
+                key={label}
+                disabled
+                title={`Available in ${milestone}`}
+                aria-label={`${label}, available in ${milestone}`}
+              >
+                <span className="nav-future-label">
+                  <NavGlyph name={icon} /> {label}
+                </span>
+                <span className="milestone">{milestone}</span>
+              </button>
+            ))}
+            <div className="nav-bottom">
+              <button
+                type="button"
+                className={`nav-item ${page === "settings" ? "active" : ""}`}
+                aria-current={page === "settings" ? "page" : undefined}
+                onClick={() => setPage("settings")}
+              >
+                <NavGlyph name="settings" /> Settings
+              </button>
+              <div className="rail-repository">
+                <span>Open repository</span>
+                <strong title={repository?.rootName}>
+                  {repository?.rootName ?? "None selected"}
+                </strong>
+                <small>
+                  {repository
+                    ? `Local session · revision ${repository.revision}`
+                    : "Select a local root to begin"}
+                </small>
+                <button type="button" onClick={() => setPage("repository")}>
+                  {repository ? "Change repository" : "Open repository"}
+                </button>
+              </div>
+            </div>
+          </nav>
+        )}
 
         <main
           className={`main ${page === "graph" ? "graph-main" : ""}`}
@@ -198,7 +250,10 @@ export function App() {
             <Workspace
               repository={repository}
               onOpenRepository={() => setPage("repository")}
-              onOpenGraph={() => setPage("graph")}
+              onOpenGraph={() => {
+                setInitialFilePath(null);
+                setPage("graph");
+              }}
             />
           ) : page === "repository" ? (
             <RepositoryPage
@@ -218,6 +273,7 @@ export function App() {
                     : "none"
                 }
                 repository={repository}
+                initialPath={initialFilePath}
                 connection={connection}
                 onOpenRepository={() => setPage("repository")}
                 onStale={onStale}
@@ -274,6 +330,16 @@ export function App() {
                   Source preview and dependency insights arrive in later
                   milestones.
                 </p>
+                <button
+                  type="button"
+                  className="inspector-atlas-link"
+                  onClick={() => {
+                    setInitialFilePath(selectedFile.path);
+                    setPage("graph");
+                  }}
+                >
+                  Open file evidence in 3D atlas
+                </button>
               </div>
             ) : (
               <div className="inspector-empty">

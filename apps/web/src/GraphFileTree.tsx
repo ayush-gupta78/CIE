@@ -47,7 +47,17 @@ export function GraphFileTree({
   onFocusModule: (path: string) => void;
 }) {
   const root = useMemo(() => buildFileTree(files), [files]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const paths = new Set<string>();
+    let node = root;
+    for (let depth = 0; depth < 3 && node.children.length; depth++) {
+      node = [...node.children].sort(
+        (a, b) => b.count - a.count || a.path.localeCompare(b.path),
+      )[0];
+      paths.add(node.path);
+    }
+    return paths;
+  });
   useEffect(() => {
     if (!selectedId) return;
     const file = files.find((item) => item.id === selectedId);
@@ -88,7 +98,10 @@ export function GraphFileTree({
                   })
                 }
               >
-                <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+                <span
+                  className={`atlas-tree-chevron ${open ? "open" : ""}`}
+                  aria-hidden="true"
+                />
                 <span
                   className="graph-group-dot"
                   style={{ backgroundColor: groupColor(child.path) }}
@@ -102,7 +115,7 @@ export function GraphFileTree({
                 aria-label={`Focus module ${child.path}`}
                 onClick={() => onFocusModule(child.path)}
               >
-                ◎
+                <span className="atlas-focus-target" aria-hidden="true" />
               </button>
             </div>
             {open && render(child)}
@@ -123,7 +136,10 @@ export function GraphFileTree({
               aria-label={file.path}
               onClick={() => onSelect(file.id)}
             >
-              <span>◇ {file.name}</span>
+              <span>
+                <span className="atlas-file-symbol" aria-hidden="true" />{" "}
+                {file.name}
+              </span>
               {node.path === "." && <small>{file.path}</small>}
               {file.status === "failed" && <em>Parse failed</em>}
             </button>
