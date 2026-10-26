@@ -173,8 +173,8 @@ it("fits the same 3D bounds farther away in a narrow viewport", () => {
 });
 
 it("keeps large or many-module repositories fully framed on wide stages", () => {
-  expect(initialCameraScale(2.3, 34, 2)).toBe(0.66);
-  expect(initialCameraScale(1.95, 34, 2)).toBe(0.85);
+  expect(initialCameraScale(2.3, 34, 2)).toBe(0.8);
+  expect(initialCameraScale(1.95, 34, 2)).toBe(0.94);
   expect(initialCameraScale(1.55, 34, 2)).toBe(1.05);
   expect(initialCameraScale(2.3, 200, 0)).toBe(1.05);
   expect(initialCameraScale(2.3, 34, 6)).toBe(1.05);
@@ -236,14 +236,14 @@ it("spreads real modules and files across the atlas without making a lone root f
   const webZ = files
     .slice(10)
     .map((entry) => layout.positions.get(entry.id)![2]);
-  expect(web[0] - server[0]).toBeGreaterThan(30);
+  expect(web[0] - server[0]).toBeGreaterThan(17);
   const projectedRight = (point: [number, number, number]) =>
     (point[0] * HOME_DIRECTION[2] - point[2] * HOME_DIRECTION[0]) /
     Math.hypot(HOME_DIRECTION[0], HOME_DIRECTION[2]);
-  expect(projectedRight(web) - projectedRight(server)).toBeGreaterThan(20);
+  expect(projectedRight(web) - projectedRight(server)).toBeGreaterThan(13);
   expect(root[0]).toBeGreaterThan(server[0]);
   expect(root[0]).toBeLessThan(web[0]);
-  expect(Math.max(...webX) - Math.min(...webX)).toBeGreaterThan(12);
+  expect(Math.max(...webX) - Math.min(...webX)).toBeGreaterThan(10);
   expect(Math.max(...webZ) - Math.min(...webZ)).toBeGreaterThan(7);
   expect(layoutGraph(projectGraph(graph(files)))).toEqual(layout);
 });
@@ -256,4 +256,18 @@ it("curves a verified connection between its exact file endpoints without adding
   expect(points.at(-1)).toEqual(to);
   expect(points[Math.floor(points.length / 2)][1]).toBeGreaterThan(from[1]);
   expect(points.every((point) => point.every(Number.isFinite))).toBe(true);
+});
+
+it("keeps file foundations separated within a dense real directory", () => {
+  const files = Array.from({ length: 75 }, (_, i) =>
+    file(`id-${i}`, `src/f${i}.ts`),
+  );
+  const points = [
+    ...layoutGraph(projectGraph(graph(files))).positions.values(),
+  ];
+  for (let i = 0; i < points.length; i++)
+    for (let j = i + 1; j < points.length; j++)
+      expect(
+        Math.hypot(points[i][0] - points[j][0], points[i][2] - points[j][2]),
+      ).toBeGreaterThan(2);
 });

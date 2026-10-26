@@ -2,7 +2,15 @@ import { Component, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, Line } from "@react-three/drei";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { Quaternion, Vector3 } from "three";
+import {
+  BoxGeometry,
+  DoubleSide,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  Quaternion,
+  Vector3,
+} from "three";
+import type { FileNode } from "./graphApi";
 import { shortFileLabels, visibleLabelIds } from "./graphLabels";
 import {
   dependencyArc,
@@ -14,6 +22,234 @@ import {
 } from "./graphModel";
 
 type Layout = ReturnType<typeof import("./graphModel").layoutGraph>;
+const block = new BoxGeometry(1, 1, 1);
+const glass = new MeshStandardMaterial({
+  color: "#344553",
+  metalness: 0.28,
+  roughness: 0.32,
+  transparent: true,
+  opacity: 0.76,
+  depthWrite: false,
+  side: DoubleSide,
+});
+const darkMetal = new MeshStandardMaterial({
+  color: "#3b3833",
+  metalness: 0.82,
+  roughness: 0.3,
+});
+const floor = new MeshStandardMaterial({
+  color: "#131719",
+  metalness: 0.58,
+  roughness: 0.43,
+});
+
+// Stable decorative variation, never a file metric or a second selectable node.
+function dimensions(file: FileNode, unit: number) {
+  let hash = 0;
+  for (const char of file.path) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return {
+    height: unit * (4.8 + (hash % 7) * 0.55),
+    width: unit * (1.24 + (hash % 3) * 0.16),
+    hash,
+  };
+}
+
+function Beam({
+  position,
+  scale,
+  material,
+}: {
+  position: Point;
+  scale: Point;
+  material: MeshBasicMaterial | MeshStandardMaterial;
+}) {
+  return (
+    <mesh
+      geometry={block}
+      material={material}
+      position={position}
+      scale={scale}
+    />
+  );
+}
+
+function FileBuilding({
+  file,
+  unit,
+  accent,
+  active,
+  selected,
+  highlighted,
+  detailed,
+}: {
+  file: FileNode;
+  unit: number;
+  accent: MeshBasicMaterial;
+  active: boolean;
+  selected: boolean;
+  highlighted: boolean;
+  detailed: boolean;
+}) {
+  const { height: h, width: w, hash } = dimensions(file, unit);
+  const variant = hash % 3;
+  const rib = unit * 0.045;
+  return (
+    <group>
+      {/* A file is one pickable group. Everything below is non-semantic architecture. */}
+      <Beam
+        position={[0, -0.12, 0]}
+        scale={[w * 1.75, 0.26, w * 1.65]}
+        material={floor}
+      />
+      <Beam
+        position={[0, 0.03, 0]}
+        scale={[w * 1.48, 0.055, w * 1.45]}
+        material={darkMetal}
+      />
+      <Beam
+        position={[0, h * 0.48, 0]}
+        scale={[w, h * 0.95, w]}
+        material={glass}
+      />
+      <Beam
+        position={[0, h * 0.47, 0]}
+        scale={[w * 0.36, h * 0.82, w * 0.36]}
+        material={floor}
+      />
+      <Beam
+        position={[0, h * 0.51, w * 0.22]}
+        scale={[w * 0.08, h * 0.86, w * 0.08]}
+        material={accent}
+      />
+      <Beam
+        position={[0, h * 0.21, w * 0.54]}
+        scale={[w * 0.78, h * 0.37, w * 0.12]}
+        material={glass}
+      />
+      <Beam
+        position={[0, h * 0.41, w * 0.57]}
+        scale={[w * 0.92, 0.1, w * 0.23]}
+        material={darkMetal}
+      />
+      <Beam
+        position={[0, h * 0.42, w * 0.58]}
+        scale={[w * 0.62, 0.035, w * 0.04]}
+        material={accent}
+      />
+      {detailed &&
+        [-1, 1].map((side) => (
+          <group key={side}>
+            <Beam
+              position={[side * w * 0.32, h * 0.21, w * 0.63]}
+              scale={[rib, h * 0.38, rib]}
+              material={accent}
+            />
+            <Beam
+              position={[side * w * 0.18, h * 0.53, w * 0.54]}
+              scale={[rib, h * 0.72, rib]}
+              material={accent}
+            />
+          </group>
+        ))}
+      {(detailed ? [0.18, 0.43, 0.68, 0.91] : [0.18, 0.91]).map((level) => (
+        <group key={level} position={[0, h * level, 0]}>
+          <Beam
+            position={[0, 0, w * 0.52]}
+            scale={[w * 1.07, rib, rib]}
+            material={accent}
+          />
+          <Beam
+            position={[0, 0, -w * 0.52]}
+            scale={[w * 1.07, rib, rib]}
+            material={darkMetal}
+          />
+          <Beam
+            position={[w * 0.52, 0, 0]}
+            scale={[rib, rib, w * 1.07]}
+            material={accent}
+          />
+          <Beam
+            position={[-w * 0.52, 0, 0]}
+            scale={[rib, rib, w * 1.07]}
+            material={darkMetal}
+          />
+        </group>
+      ))}
+      {[-1, 1].flatMap((x) =>
+        [-1, 1].map((z) => (
+          <Beam
+            key={`${x}:${z}`}
+            position={[x * w * 0.51, h * 0.48, z * w * 0.51]}
+            scale={[rib, h * 0.94, rib]}
+            material={accent}
+          />
+        )),
+      )}
+      {/* Layered setback crown and an illuminated, inset upper chamber. */}
+      <Beam
+        position={[0, h * 0.94, 0]}
+        scale={[w * 1.28, 0.13, w * 1.28]}
+        material={darkMetal}
+      />
+      <Beam
+        position={[0, h + w * 0.22, 0]}
+        scale={[w * (variant === 0 ? 0.8 : 0.62), w * 0.42, w * 0.67]}
+        material={glass}
+      />
+      <Beam
+        position={[0, h + w * 0.44, 0]}
+        scale={[w * 1.38, 0.13, w * 1.38]}
+        material={accent}
+      />
+      <Beam
+        position={[0, h + w * 0.53, 0]}
+        scale={[w * 0.54, 0.09, w * 0.54]}
+        material={accent}
+      />
+      {variant !== 0 && (
+        <Beam
+          position={[0, h + w * 0.83, 0]}
+          scale={[rib, w * 0.56, rib]}
+          material={accent}
+        />
+      )}
+      {detailed && variant === 2 && (
+        <Beam
+          position={[w * 0.52, h * 0.35, 0]}
+          scale={[w * 0.36, h * 0.52, w * 0.43]}
+          material={glass}
+        />
+      )}
+      {(selected || active) && (
+        <Beam
+          position={[0, h * 0.2, w * 0.53]}
+          scale={[w * 0.44, rib, rib]}
+          material={accent}
+        />
+      )}
+      {highlighted && (
+        <>
+          <mesh
+            material={accent}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, -0.24, 0]}
+          >
+            <ringGeometry args={[w * 0.98, w * 1.06, 32]} />
+          </mesh>
+          {selected && (
+            <pointLight
+              position={[0, h * 0.78, 0]}
+              color="#f9c57a"
+              intensity={2.1}
+              distance={8}
+              decay={2}
+            />
+          )}
+        </>
+      )}
+    </group>
+  );
+}
 type Props = {
   model: SceneModel;
   layout: Layout;
@@ -75,17 +311,26 @@ function CameraRig({
   const fitPoints = useMemo(
     () => [
       ...layout.positions.values(),
-      ...[...layout.positions.values()].map(
-        ([x, y, z]) =>
-          [
-            x,
-            y + Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 8.2,
-            z,
-          ] as Point,
-      ),
+      ...model.files.flatMap((file) => {
+        const point = layout.positions.get(file.id);
+        return point
+          ? [
+              [
+                point[0],
+                point[1] +
+                  dimensions(
+                    file,
+                    Math.min(1.25, Math.max(0.85, layout.radius / 55)),
+                  ).height +
+                  1,
+                point[2],
+              ] as Point,
+            ]
+          : [];
+      }),
       ...layout.groups.map((group) => group.position),
     ],
-    [layout],
+    [layout, model],
   );
   const home = useMemo(
     () => homeDistance(fitPoints, layout.center, size.width / size.height),
@@ -133,7 +378,7 @@ function CameraRig({
         );
         if (scale !== previousScale.current) {
           controls.target.set(
-            layout.center[0] + (scale === 0.66 ? layout.radius * 0.3 : 0),
+            layout.center[0] + layout.radius * 0.12,
             layout.center[1] + 1.2,
             layout.center[2],
           );
@@ -167,9 +412,8 @@ function CameraRig({
       layout.zones.length,
     );
     const center = new Vector3(
-      layout.center[0] +
-        (scale !== 0.66 || cameraCommand === "fit" ? 0 : layout.radius * 0.3),
-      layout.center[1] + 1.2,
+      layout.center[0] + (cameraCommand === "fit" ? 0 : layout.radius * 0.12),
+      layout.center[1] + 2.4,
       layout.center[2],
     );
     controls.target.copy(center);
@@ -226,10 +470,22 @@ function CameraRig({
       .map((id) => layout.positions.get(id))
       .filter((point): point is Point => !!point);
     if (!points.length) return;
-    const height = Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 8.2;
+    const unit = Math.min(1.25, Math.max(0.85, layout.radius / 55));
     const bounds: Point[] = [
       ...points,
-      ...points.map(([x, y, z]): Point => [x, y + height, z]),
+      ...ids.flatMap((id) => {
+        const point = layout.positions.get(id);
+        const file = model.files.find((entry) => entry.id === id);
+        return point && file
+          ? [
+              [
+                point[0],
+                point[1] + dimensions(file, unit).height + 1,
+                point[2],
+              ] as Point,
+            ]
+          : [];
+      }),
     ];
     const center = [0, 1, 2].map(
       (axis) =>
@@ -246,7 +502,7 @@ function CameraRig({
         direction.x,
         direction.y,
         direction.z,
-      ]) * 0.85,
+      ]) * 1.15,
     );
     controls.target.set(...center);
     camera.position.set(...center).addScaledVector(direction, distance);
@@ -299,7 +555,12 @@ function FileLabels({
     const candidates = model.files.flatMap((file) => {
       const position = layout.positions.get(file.id);
       if (!position) return [];
-      const projected = new Vector3(...position).project(camera);
+      const unit = Math.min(1.25, Math.max(0.85, layout.radius / 55));
+      const projected = new Vector3(
+        position[0],
+        position[1] + dimensions(file, unit).height + 0.9,
+        position[2],
+      ).project(camera);
       if (projected.z < -1 || projected.z > 1) return [];
       const priority =
         file.id === selectedId
@@ -307,9 +568,13 @@ function FileLabels({
           : related.has(file.id)
             ? 3
             : firstInGroup.has(file.id)
-              ? 2
+              ? size.width <= 400
+                ? 0
+                : 2
               : distance < layout.radius * 0.85
-                ? 1
+                ? size.width <= 400
+                  ? 0
+                  : 1
                 : 0;
       return [
         {
@@ -337,7 +602,16 @@ function FileLabels({
         return (
           <Html
             key={file.id}
-            position={[point[0], point[1] + 0.7, point[2]]}
+            position={[
+              point[0],
+              point[1] +
+                dimensions(
+                  file,
+                  Math.min(1.25, Math.max(0.85, layout.radius / 55)),
+                ).height +
+                0.9,
+              point[2],
+            ]}
             center
             style={{ pointerEvents: "none" }}
           >
@@ -391,9 +665,48 @@ function SpatialGraph({
         ]
       : [],
   );
+  const uses = new Set(
+    (selectedId ? (model.outgoing.get(selectedId) ?? []) : []).flatMap(
+      (edge) => (edge.to ? [edge.to] : []),
+    ),
+  );
+  const usedBy = new Set(
+    (selectedId ? (model.incoming.get(selectedId) ?? []) : []).map(
+      (edge) => edge.from,
+    ),
+  );
   const nodeSize = Math.min(1.25, Math.max(0.85, layout.radius / 55));
   const colors = new Map(
     model.groups.map((group) => [group.path, group.color]),
+  );
+  const accents = useMemo(() => {
+    const result = new Map<string, MeshBasicMaterial>();
+    for (const color of [
+      ...new Set([
+        ...model.groups.map((group) => group.color),
+        "#f4ce8b",
+        "#f1c78c",
+        "#82bde1",
+        "#b47670",
+      ]),
+    ])
+      for (const state of ["bright", "dim"])
+        result.set(
+          `${color}:${state}`,
+          new MeshBasicMaterial({
+            color,
+            transparent: true,
+            opacity: state === "bright" ? 0.92 : 0.16,
+            depthWrite: false,
+          }),
+        );
+    return result;
+  }, [model]);
+  useEffect(
+    () => () => {
+      for (const material of accents.values()) material.dispose();
+    },
+    [accents],
   );
   return (
     <>
@@ -407,17 +720,18 @@ function SpatialGraph({
         orbitToken={orbitToken}
         cameraCommand={cameraCommand}
       />
-      <ambientLight intensity={0.8} />
+      <ambientLight intensity={0.9} />
       <directionalLight
         position={[18, 22, 30]}
-        intensity={2.4}
+        intensity={2.8}
         color="#f4d8a8"
       />
       <directionalLight
         position={[-28, -12, -20]}
-        intensity={1.3}
+        intensity={1.6}
         color="#78a9c6"
       />
+
       {layout.zones
         .filter(
           (zone) =>
@@ -432,113 +746,151 @@ function SpatialGraph({
           ).length;
           return (
             <group key={zone.path} position={zone.position}>
-              {!selectedId && (
-                <mesh rotation={[-Math.PI / 2, 0, 0]}>
-                  <ringGeometry
-                    args={[
-                      Math.min(6, Math.max(3, zone.radius * 0.4)),
-                      Math.min(6, Math.max(3, zone.radius * 0.4)) + 0.03,
-                      48,
-                    ]}
-                  />
-                  <meshBasicMaterial
-                    color={zone.color}
-                    transparent
-                    opacity={0.25}
-                    depthWrite={false}
-                    side={2}
-                  />
-                </mesh>
-              )}
-              {!selectedId && (
-                <Html
-                  position={[0, zone.radius * 0.38, 0]}
-                  center
-                  style={{ pointerEvents: "none" }}
-                >
-                  <span className="graph-zone-label" title={zone.path}>
-                    {zone.path}
-                    <small>{count} files</small>
-                  </span>
-                </Html>
-              )}
+              <Html
+                position={[0, 9, 0]}
+                center
+                style={{
+                  pointerEvents: "none",
+                  visibility: selectedId ? "hidden" : "visible",
+                }}
+              >
+                <span className="graph-zone-label" title={zone.path}>
+                  {zone.path}
+                  <small>{count} files</small>
+                </span>
+              </Html>
             </group>
           );
         })}
-      {layout.groups.map((group) => (
-        <group key={group.path} position={group.position}>
-          {!selectedId &&
-            layout.groups.length <= 28 &&
-            !layout.zones.some(
-              (zone) =>
-                group.path === zone.path ||
-                group.path.startsWith(`${zone.path}/`),
-            ) && (
-              <Html
-                position={[0, 3.1, 0]}
-                center
-                style={{ pointerEvents: "none" }}
-              >
-                <span className="graph-group-label" title={group.path}>
-                  {group.path === "." ? "root" : group.path}
-                </span>
-              </Html>
-            )}
-        </group>
-      ))}
+      {layout.groups.map((group) => {
+        const points =
+          model.groups
+            .find((entry) => entry.path === group.path)
+            ?.files.map((file) => layout.positions.get(file.id))
+            .filter((point): point is Point => !!point) ?? [];
+        if (!points.length) return null;
+        const minX = Math.min(...points.map((point) => point[0]));
+        const maxX = Math.max(...points.map((point) => point[0]));
+        const minZ = Math.min(...points.map((point) => point[2]));
+        const maxZ = Math.max(...points.map((point) => point[2]));
+        const x = (minX + maxX) / 2,
+          z = (minZ + maxZ) / 2;
+        const width = maxX - minX + 3.5,
+          depth = maxZ - minZ + 3.6;
+        const base = Math.min(...points.map((point) => point[1])) - 0.42;
+        const trim = accents.get(`${group.color}:bright`)!;
+        return (
+          <group key={group.path}>
+            <Beam
+              position={[x, base - 0.18, z]}
+              scale={[width, 0.35, depth]}
+              material={floor}
+            />
+            <Beam
+              position={[x, base + 0.04, z]}
+              scale={[width, 0.08, depth]}
+              material={darkMetal}
+            />
+            {[-1, 1].map((side) => (
+              <group key={side}>
+                <Beam
+                  position={[x, base + 0.12, z + (side * depth) / 2]}
+                  scale={[width, 0.05, 0.045]}
+                  material={trim}
+                />
+                <Beam
+                  position={[x + (side * width) / 2, base + 0.12, z]}
+                  scale={[0.045, 0.05, depth]}
+                  material={trim}
+                />
+              </group>
+            ))}
+            {layout.groups.length <= 28 &&
+              !layout.zones.some(
+                (zone) =>
+                  group.path === zone.path ||
+                  group.path.startsWith(`${zone.path}/`),
+              ) && (
+                <Html
+                  position={[x, base + 8.5, z]}
+                  center
+                  style={{
+                    pointerEvents: "none",
+                    visibility: selectedId ? "hidden" : "visible",
+                  }}
+                >
+                  <span className="graph-group-label" title={group.path}>
+                    {group.path === "." ? "root" : group.path}
+                  </span>
+                </Html>
+              )}
+          </group>
+        );
+      })}
       {model.connections.map((connection) => {
         const a = layout.positions.get(connection.from),
           b = layout.positions.get(connection.to);
         if (!a || !b) return null;
         if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 0.001)
           return null;
+        const source = model.files.find((file) => file.id === connection.from)!;
+        const target = model.files.find((file) => file.id === connection.to)!;
         const points = dependencyArc(
-          [a[0], a[1] + nodeSize * 1.7, a[2]],
-          [b[0], b[1] + nodeSize * 1.7, b[2]],
+          [a[0], a[1] + dimensions(source, nodeSize).height + 0.4, a[2]],
+          [b[0], b[1] + dimensions(target, nodeSize).height + 0.4, b[2]],
         );
+        const crossDirectory = source.parent !== target.parent;
         const emphasized =
           !selectedId ||
           connection.from === selectedId ||
           connection.to === selectedId;
         const color = !selectedId
-          ? "#977f68"
+          ? crossDirectory
+            ? "#d2b68c"
+            : (colors.get(source.parent) ?? "#9bafbb")
           : connection.from === selectedId
             ? "#f1c78c"
             : connection.to === selectedId
               ? "#82bde1"
               : "#584e4b";
-        const arrow = new Vector3(...points[13]);
+        const arrow = new Vector3(...points[14]);
         const rotation = new Quaternion().setFromUnitVectors(
           new Vector3(0, 1, 0),
-          new Vector3(...points[14])
-            .sub(new Vector3(...points[12]))
+          new Vector3(...points[15])
+            .sub(new Vector3(...points[13]))
             .normalize(),
         );
         return (
           <group key={`${connection.from}:${connection.to}:${connection.kind}`}>
-            {selectedId && emphasized && (
+            {emphasized && (
               <Line
                 points={points}
                 color={color}
-                lineWidth={6}
+                lineWidth={selectedId ? 8 : crossDirectory ? 5 : 3.5}
                 transparent
-                opacity={0.14}
+                opacity={selectedId ? 0.24 : crossDirectory ? 0.16 : 0.1}
               />
             )}
             <Line
               points={points}
               color={color}
               lineWidth={
-                selectedId && emphasized ? 2.7 : emphasized ? 1.1 : 0.65
+                selectedId && emphasized ? 2.8 : crossDirectory ? 1.8 : 1.35
               }
               transparent
               opacity={
-                selectedId && emphasized ? 0.95 : emphasized ? 0.34 : 0.08
+                selectedId && emphasized ? 0.98 : emphasized ? 0.7 : 0.08
               }
             />
-            {selectedId && emphasized && (
+            {emphasized && (selectedId || crossDirectory) && (
               <mesh position={arrow} quaternion={rotation}>
-                <coneGeometry args={[nodeSize * 0.21, nodeSize * 0.58, 5]} />
+                <coneGeometry
+                  args={[
+                    nodeSize * (selectedId ? 0.19 : 0.11),
+                    nodeSize * (selectedId ? 0.5 : 0.3),
+                    5,
+                  ]}
+                />
                 <meshBasicMaterial color={color} />
               </mesh>
             )}
@@ -552,13 +904,14 @@ function SpatialGraph({
           active = !selectedId || related.has(file.id);
         const color = selected
           ? "#f4ce8b"
-          : file.status === "failed"
-            ? "#b47670"
-            : (colors.get(file.parent) ?? "#ba9a72");
-        // Path length adds visual rhythm only; it is not a complexity metric.
-        const height =
-          nodeSize * (selected ? 8.2 : 5.1 + (file.path.length % 4) * 0.8);
-        const width = nodeSize * (selected ? 0.78 : 0.64);
+          : uses.has(file.id)
+            ? "#f1c78c"
+            : usedBy.has(file.id)
+              ? "#82bde1"
+              : file.status === "failed"
+                ? "#b47670"
+                : (colors.get(file.parent) ?? "#ba9a72");
+        const accent = accents.get(`${color}:${active ? "bright" : "dim"}`)!;
         return (
           <group
             key={file.id}
@@ -577,81 +930,15 @@ function SpatialGraph({
               onHover("");
             }}
           >
-            <mesh>
-              <boxGeometry args={[width, height, width]} />
-              <meshStandardMaterial
-                color={selected ? "#654b33" : "#17212a"}
-                emissive={color}
-                emissiveIntensity={selected ? 0.85 : active ? 0.3 : 0.03}
-                transparent
-                opacity={active ? 0.86 : 0.23}
-                roughness={0.18}
-                metalness={0.72}
-              />
-            </mesh>
-            <mesh>
-              <boxGeometry args={[width * 1.12, height * 1.02, width * 1.12]} />
-              <meshBasicMaterial
-                color={color}
-                wireframe
-                transparent
-                opacity={selected ? 0.95 : active ? 0.68 : 0.08}
-                depthWrite={false}
-              />
-            </mesh>
-            <mesh position={[0, height * 0.16, 0]}>
-              <boxGeometry
-                args={[nodeSize * 0.12, height * 0.75, nodeSize * 0.12]}
-              />
-              <meshBasicMaterial
-                color={selected ? "#ffe2a8" : color}
-                transparent
-                opacity={active ? 0.8 : 0.08}
-              />
-            </mesh>
-            <mesh position={[0, height * 0.3, 0]}>
-              <boxGeometry args={[width * 1.18, 0.09, width * 1.18]} />
-              <meshBasicMaterial
-                color={color}
-                transparent
-                opacity={active ? 0.75 : 0.1}
-              />
-            </mesh>
-            <mesh position={[0, height / 2 + 0.08, 0]}>
-              <boxGeometry args={[width * 1.55, 0.15, width * 1.55]} />
-              <meshStandardMaterial
-                color={selected ? "#ffe2ae" : "#b8b9b2"}
-                emissive={color}
-                emissiveIntensity={active ? 1.25 : 0.1}
-                metalness={0.62}
-                roughness={0.16}
-                transparent
-                opacity={active ? 0.95 : 0.2}
-              />
-            </mesh>
-            {selected && (
-              <>
-                <mesh
-                  rotation={[-Math.PI / 2, 0, 0]}
-                  position={[0, -height / 2 - 0.08, 0]}
-                >
-                  <ringGeometry args={[nodeSize * 0.95, nodeSize * 1.2, 32]} />
-                  <meshBasicMaterial
-                    color="#f3d4a0"
-                    transparent
-                    opacity={0.78}
-                    side={2}
-                  />
-                </mesh>
-                <pointLight
-                  position={[0, height * 0.4, 0]}
-                  color="#ffd69d"
-                  intensity={2.5}
-                  distance={11}
-                  decay={2}
-                />
-              </>
-            )}
+            <FileBuilding
+              file={file}
+              unit={nodeSize}
+              accent={accent}
+              active={active}
+              selected={selected}
+              highlighted={!!selectedId && active}
+              detailed={model.files.length <= 80}
+            />
           </group>
         );
       })}

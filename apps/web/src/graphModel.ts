@@ -14,7 +14,7 @@ export function initialCameraScale(
 ): number {
   // ponytail: fixed 80-file cutover; use measured occupancy if larger repos need closer framing.
   if (fileCount > 80 || moduleCount > 4) return 1.05;
-  return aspect >= 2.05 ? 0.66 : aspect >= 1.85 ? 0.85 : 1.05;
+  return aspect >= 2.05 ? 0.8 : aspect >= 1.85 ? 0.94 : 1.05;
 }
 export type Connection = {
   from: string;
@@ -134,17 +134,12 @@ export function layoutGraph(model: SceneModel): {
     a[1] + b[1],
     a[2] + b[2],
   ];
+  // Five-wide blocks form walkable districts; elevation is stepped, never a vertical stack.
   const fileOffset = (index: number, count: number): Point => [
-    ((index % 5) - (Math.min(count, 5) - 1) / 2) * 3.2,
-    ((Math.floor(index / 5) % 5) -
-      (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
-      2.7 +
-      ((index % 2) - 0.5) * 0.7,
-    ((Math.floor(index / 5) % 5) -
-      (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
-      2.1 +
-      (Math.floor(index / 25) - (Math.ceil(count / 25) - 1) / 2) * 3.6 +
-      ((index % 4) - 1.5) * 1.1,
+    ((index % 5) - (Math.min(count, 5) - 1) / 2) * 2.65,
+    (Math.floor(index / 5) % 3) * 0.42,
+    (Math.floor(index / 5) - (Math.ceil(count / 5) - 1) / 2) * 2.75 +
+      ((index % 2) - 0.5) * 0.32,
   ];
   const roots = new Map<string, Map<string, Group[]>>();
   for (const group of model.groups) {
@@ -164,7 +159,7 @@ export function layoutGraph(model: SceneModel): {
         .map(([name, leaves]) => {
           const local = leaves.map((group, index) => ({
             group,
-            position: offset(index, leaves.length, 9),
+            position: offset(index, leaves.length, 8),
           }));
           const radius =
             Math.max(
@@ -180,8 +175,8 @@ export function layoutGraph(model: SceneModel): {
           return { path: name, leaves: local, radius };
         });
       const step = Math.max(
-        children.length <= 4 ? 34 : 19,
-        ...children.map((child) => child.radius * 1.3),
+        19,
+        ...children.map((child) => child.radius * 1.12),
       );
       const placed = children.map((child, index) => ({
         ...child,

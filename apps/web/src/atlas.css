@@ -1900,6 +1900,27 @@ body {
   .atlas-stage-caption strong {
     display: none;
   }
+  .atlas-module-key {
+    display: block;
+    top: 57px;
+    left: 10px;
+    width: 140px;
+    padding: 5px;
+  }
+  .atlas-module-key > span {
+    margin-bottom: 2px;
+  }
+  .atlas-module-key > div {
+    font-size: 10px;
+  }
+  .graph-zone-label {
+    max-width: 110px;
+    margin-left: 36px;
+    font-size: 14px;
+  }
+  .graph-group-label {
+    display: none;
+  }
   .graph-stage-legend {
     bottom: 7px;
     left: 8px;
