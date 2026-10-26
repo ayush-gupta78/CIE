@@ -5,8 +5,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Quaternion, Vector3 } from "three";
 import { shortFileLabels, visibleLabelIds } from "./graphLabels";
 import {
+  dependencyArc,
   HOME_DIRECTION,
   homeDistance,
+  initialCameraScale,
   type Point,
   type SceneModel,
 } from "./graphModel";
@@ -31,6 +33,7 @@ type Props = {
 export function supportsWebGL(): boolean {
   return typeof WebGLRenderingContext !== "undefined";
 }
+
 class SceneBoundary extends Component<
   { children: ReactNode; onUnavailable: () => void },
   { failed: boolean }
@@ -69,25 +72,24 @@ function CameraRig({
 >) {
   const { camera, gl, invalidate, size } = useThree();
   const controlsRef = useRef<OrbitControls | null>(null);
-  const home = useMemo(
-    () =>
-      homeDistance(
-        [
-          ...layout.positions.values(),
-          ...[...layout.positions.values()].map(
-            ([x, y, z]) =>
-              [
-                x,
-                y + Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 6.2,
-                z,
-              ] as Point,
-          ),
-          ...layout.groups.map((group) => group.position),
-        ],
-        layout.center,
-        size.width / size.height,
+  const fitPoints = useMemo(
+    () => [
+      ...layout.positions.values(),
+      ...[...layout.positions.values()].map(
+        ([x, y, z]) =>
+          [
+            x,
+            y + Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 8.2,
+            z,
+          ] as Point,
       ),
-    [layout, size.width, size.height],
+      ...layout.groups.map((group) => group.position),
+    ],
+    [layout],
+  );
+  const home = useMemo(
+    () => homeDistance(fitPoints, layout.center, size.width / size.height),
+    [fitPoints, layout.center, size.width, size.height],
   );
   const homeRef = useRef(home);
   homeRef.current = home;
@@ -95,6 +97,13 @@ function CameraRig({
   const previousOrbitToken = useRef(orbitToken);
   const aspectRef = useRef(size.width / size.height);
   aspectRef.current = size.width / size.height;
+  const previousScale = useRef(
+    initialCameraScale(
+      aspectRef.current,
+      model.files.length,
+      layout.zones.length,
+    ),
+  );
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
     controlsRef.current = controls;
@@ -117,15 +126,32 @@ function CameraRig({
       // Preserve orbit direction and target while resizing, but fit the new aspect.
       if (previousHome.current !== home) {
         const offset = camera.position.clone().sub(controls.target);
-        camera.position
-          .copy(controls.target)
-          .addScaledVector(offset, home / previousHome.current);
+        const scale = initialCameraScale(
+          aspectRef.current,
+          model.files.length,
+          layout.zones.length,
+        );
+        if (scale !== previousScale.current) {
+          controls.target.set(
+            layout.center[0] + (scale === 0.66 ? layout.radius * 0.3 : 0),
+            layout.center[1] + 1.2,
+            layout.center[2],
+          );
+          camera.position
+            .copy(controls.target)
+            .addScaledVector(offset.normalize(), home * scale);
+        } else {
+          camera.position
+            .copy(controls.target)
+            .addScaledVector(offset, home / previousHome.current);
+        }
+        previousScale.current = scale;
         controls.update();
         invalidate();
       }
     }
     previousHome.current = home;
-  }, [camera, home, invalidate]);
+  }, [camera, home, invalidate, layout, model.files.length]);
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
@@ -135,10 +161,15 @@ function CameraRig({
         : new Vector3(...HOME_DIRECTION);
     if (!Number.isFinite(direction.lengthSq()) || direction.lengthSq() < 0.01)
       direction.set(...HOME_DIRECTION);
-    const compact = aspectRef.current < 0.85;
+    const scale = initialCameraScale(
+      aspectRef.current,
+      model.files.length,
+      layout.zones.length,
+    );
     const center = new Vector3(
-      layout.center[0] + (compact ? 0 : layout.radius * 0.24),
-      layout.center[1] + 2.5,
+      layout.center[0] +
+        (scale !== 0.66 || cameraCommand === "fit" ? 0 : layout.radius * 0.3),
+      layout.center[1] + 1.2,
       layout.center[2],
     );
     controls.target.copy(center);
@@ -146,12 +177,27 @@ function CameraRig({
       .copy(center)
       .addScaledVector(
         direction,
-        homeRef.current * (cameraCommand === "reset" && !compact ? 0.72 : 1.05),
+        cameraCommand === "fit"
+          ? homeDistance(
+              fitPoints,
+              [center.x, center.y, center.z],
+              aspectRef.current,
+              [direction.x, direction.y, direction.z],
+            ) * 1.05
+          : homeRef.current * scale,
       );
     controls.update();
     camera.updateProjectionMatrix();
     invalidate();
-  }, [camera, invalidate, layout, resetToken, cameraCommand]);
+  }, [
+    camera,
+    invalidate,
+    layout,
+    fitPoints,
+    model.files.length,
+    resetToken,
+    cameraCommand,
+  ]);
   useEffect(() => {
     if (orbitToken === previousOrbitToken.current || !controlsRef.current)
       return;
@@ -180,19 +226,28 @@ function CameraRig({
       .map((id) => layout.positions.get(id))
       .filter((point): point is Point => !!point);
     if (!points.length) return;
+    const height = Math.min(1.25, Math.max(0.85, layout.radius / 55)) * 8.2;
+    const bounds: Point[] = [
+      ...points,
+      ...points.map(([x, y, z]): Point => [x, y + height, z]),
+    ];
     const center = [0, 1, 2].map(
       (axis) =>
-        (Math.min(...points.map((point) => point[axis])) +
-          Math.max(...points.map((point) => point[axis]))) /
+        (Math.min(...bounds.map((point) => point[axis])) +
+          Math.max(...bounds.map((point) => point[axis]))) /
         2,
     ) as Point;
-    const distance = Math.max(
-      9,
-      homeDistance(points, center, aspectRef.current) * 1.25,
-    );
     const controls = controlsRef.current;
     if (!controls) return;
     const direction = camera.position.clone().sub(controls.target).normalize();
+    const distance = Math.max(
+      9,
+      homeDistance(bounds, center, aspectRef.current, [
+        direction.x,
+        direction.y,
+        direction.z,
+      ]) * 0.85,
+    );
     controls.target.set(...center);
     camera.position.set(...center).addScaledVector(direction, distance);
     controls.update();
@@ -352,15 +407,15 @@ function SpatialGraph({
         orbitToken={orbitToken}
         cameraCommand={cameraCommand}
       />
-      <ambientLight intensity={1.45} />
+      <ambientLight intensity={0.8} />
       <directionalLight
         position={[18, 22, 30]}
-        intensity={2.8}
+        intensity={2.4}
         color="#f4d8a8"
       />
       <directionalLight
         position={[-28, -12, -20]}
-        intensity={1.4}
+        intensity={1.3}
         color="#78a9c6"
       />
       {layout.zones
@@ -412,27 +467,6 @@ function SpatialGraph({
         })}
       {layout.groups.map((group) => (
         <group key={group.path} position={group.position}>
-          <mesh position={[0, -2.4, 0]}>
-            <boxGeometry
-              args={[
-                Math.min(
-                  10,
-                  3 +
-                    (model.groups.find((item) => item.path === group.path)
-                      ?.files.length ?? 0) *
-                      0.8,
-                ),
-                0.1,
-                3.7,
-              ]}
-            />
-            <meshBasicMaterial
-              color={group.color}
-              transparent
-              opacity={0.13}
-              depthWrite={false}
-            />
-          </mesh>
           {!selectedId &&
             layout.groups.length <= 28 &&
             !layout.zones.some(
@@ -456,10 +490,12 @@ function SpatialGraph({
         const a = layout.positions.get(connection.from),
           b = layout.positions.get(connection.to);
         if (!a || !b) return null;
-        const start = new Vector3(...a),
-          end = new Vector3(...b);
-        const direction = new Vector3().subVectors(end, start);
-        if (direction.lengthSq() < 0.001) return null;
+        if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 0.001)
+          return null;
+        const points = dependencyArc(
+          [a[0], a[1] + nodeSize * 1.7, a[2]],
+          [b[0], b[1] + nodeSize * 1.7, b[2]],
+        );
         const emphasized =
           !selectedId ||
           connection.from === selectedId ||
@@ -471,22 +507,33 @@ function SpatialGraph({
             : connection.to === selectedId
               ? "#82bde1"
               : "#584e4b";
-        const arrow = start.clone().lerp(end, 0.79);
+        const arrow = new Vector3(...points[13]);
         const rotation = new Quaternion().setFromUnitVectors(
           new Vector3(0, 1, 0),
-          direction.normalize(),
+          new Vector3(...points[14])
+            .sub(new Vector3(...points[12]))
+            .normalize(),
         );
         return (
           <group key={`${connection.from}:${connection.to}:${connection.kind}`}>
+            {selectedId && emphasized && (
+              <Line
+                points={points}
+                color={color}
+                lineWidth={6}
+                transparent
+                opacity={0.14}
+              />
+            )}
             <Line
-              points={[a, b]}
+              points={points}
               color={color}
               lineWidth={
-                selectedId && emphasized ? 2.4 : emphasized ? 1.8 : 0.65
+                selectedId && emphasized ? 2.7 : emphasized ? 1.1 : 0.65
               }
               transparent
               opacity={
-                selectedId && emphasized ? 0.9 : emphasized ? 0.76 : 0.15
+                selectedId && emphasized ? 0.95 : emphasized ? 0.34 : 0.08
               }
             />
             {selectedId && emphasized && (
@@ -508,69 +555,102 @@ function SpatialGraph({
           : file.status === "failed"
             ? "#b47670"
             : (colors.get(file.parent) ?? "#ba9a72");
+        // Path length adds visual rhythm only; it is not a complexity metric.
         const height =
-          nodeSize * (selected ? 6.2 : 3.4 + (file.path.length % 3) * 0.8);
+          nodeSize * (selected ? 8.2 : 5.1 + (file.path.length % 4) * 0.8);
+        const width = nodeSize * (selected ? 0.78 : 0.64);
         return (
-          <group key={file.id} position={position}>
-            <mesh
-              onClick={(event) => {
-                event.stopPropagation();
-                onSelect(file.id);
-              }}
-              onPointerOver={(event) => {
-                event.stopPropagation();
-                document.body.style.cursor = "pointer";
-                onHover(file.path);
-              }}
-              onPointerOut={() => {
-                document.body.style.cursor = "";
-                onHover("");
-              }}
-            >
-              <boxGeometry args={[nodeSize * 0.72, height, nodeSize * 0.72]} />
+          <group
+            key={file.id}
+            position={position}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect(file.id);
+            }}
+            onPointerOver={(event) => {
+              event.stopPropagation();
+              document.body.style.cursor = "pointer";
+              onHover(file.path);
+            }}
+            onPointerOut={() => {
+              document.body.style.cursor = "";
+              onHover("");
+            }}
+          >
+            <mesh>
+              <boxGeometry args={[width, height, width]} />
               <meshStandardMaterial
-                color={color}
+                color={selected ? "#654b33" : "#17212a"}
                 emissive={color}
-                emissiveIntensity={selected ? 1.5 : active ? 0.65 : 0.1}
+                emissiveIntensity={selected ? 0.85 : active ? 0.3 : 0.03}
                 transparent
-                opacity={active ? 0.7 : 0.25}
-                roughness={0.22}
-                metalness={0.65}
+                opacity={active ? 0.86 : 0.23}
+                roughness={0.18}
+                metalness={0.72}
               />
             </mesh>
             <mesh>
-              <boxGeometry args={[nodeSize * 0.82, height, nodeSize * 0.82]} />
+              <boxGeometry args={[width * 1.12, height * 1.02, width * 1.12]} />
               <meshBasicMaterial
                 color={color}
                 wireframe
                 transparent
-                opacity={active ? 0.37 : 0.08}
+                opacity={selected ? 0.95 : active ? 0.68 : 0.08}
                 depthWrite={false}
               />
             </mesh>
             <mesh position={[0, height * 0.16, 0]}>
               <boxGeometry
-                args={[nodeSize * 0.16, height * 0.7, nodeSize * 0.16]}
+                args={[nodeSize * 0.12, height * 0.75, nodeSize * 0.12]}
               />
               <meshBasicMaterial
                 color={selected ? "#ffe2a8" : color}
                 transparent
-                opacity={active ? 0.72 : 0.12}
+                opacity={active ? 0.8 : 0.08}
+              />
+            </mesh>
+            <mesh position={[0, height * 0.3, 0]}>
+              <boxGeometry args={[width * 1.18, 0.09, width * 1.18]} />
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={active ? 0.75 : 0.1}
               />
             </mesh>
             <mesh position={[0, height / 2 + 0.08, 0]}>
-              <boxGeometry args={[nodeSize * 0.98, 0.12, nodeSize * 0.98]} />
-              <meshBasicMaterial
-                color={selected ? "#ffdfab" : color}
+              <boxGeometry args={[width * 1.55, 0.15, width * 1.55]} />
+              <meshStandardMaterial
+                color={selected ? "#ffe2ae" : "#b8b9b2"}
+                emissive={color}
+                emissiveIntensity={active ? 1.25 : 0.1}
+                metalness={0.62}
+                roughness={0.16}
                 transparent
-                opacity={active ? 1 : 0.3}
+                opacity={active ? 0.95 : 0.2}
               />
             </mesh>
             {selected && (
-              <mesh position={[0, -height / 2 - 0.08, 0]}>
-                <boxGeometry args={[nodeSize * 1.6, 0.12, nodeSize * 1.6]} />
-                <meshBasicMaterial color="#f3d4a0" />
-              </mesh>
+              <>
+                <mesh
+                  rotation={[-Math.PI / 2, 0, 0]}
+                  position={[0, -height / 2 - 0.08, 0]}
+                >
+                  <ringGeometry args={[nodeSize * 0.95, nodeSize * 1.2, 32]} />
+                  <meshBasicMaterial
+                    color="#f3d4a0"
+                    transparent
+                    opacity={0.78}
+                    side={2}
+                  />
+                </mesh>
+                <pointLight
+                  position={[0, height * 0.4, 0]}
+                  color="#ffd69d"
+                  intensity={2.5}
+                  distance={11}
+                  decay={2}
+                />
+              </>
             )}
           </group>
         );

@@ -41,3 +41,22 @@ it("prioritizes selected and directly related labels over collisions, even with 
     ).size,
   ).toBe(0);
 });
+
+it("keeps a selected label visible near the edge of a narrow stage", () => {
+  expect(
+    visibleLabelIds(
+      [{ id: "selected", x: 286, y: 200, priority: 4 }],
+      360,
+      438,
+      false,
+    ).has("selected"),
+  ).toBe(true);
+  expect(
+    visibleLabelIds(
+      [{ id: "clipped", x: 330, y: 200, priority: 4 }],
+      360,
+      438,
+      false,
+    ).has("clipped"),
+  ).toBe(false);
+});

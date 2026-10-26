@@ -430,7 +430,8 @@ body {
   width: clamp(265px, 25vw, 355px);
   min-height: 260px;
   padding: 20px 21px;
-  background: #0b0c0bec;
+  background:
+    radial-gradient(circle at 80% 12%, #82613924, transparent 55%), #0b0c0bed;
   border: 1px solid #b4905e;
   box-shadow:
     inset 0 1px #ffe6a638,
@@ -451,11 +452,11 @@ body {
   height: 16px;
 }
 .archive-current-art {
-  height: 56px;
+  height: 88px;
   margin: 16px 0;
   border: 1px solid #71583c;
   background: url("/art/archive-hall.webp") center 45% / cover;
-  filter: saturate(0.65) brightness(0.7);
+  filter: saturate(0.75) brightness(0.78);
 }
 .archive-current h2 {
   font: 400 30px var(--cie-font-display);
@@ -708,6 +709,8 @@ body {
   background:
     radial-gradient(ellipse 44% 55% at 32% 40%, #b9762621, transparent 80%),
     radial-gradient(ellipse 30% 50% at 68% 25%, #39679a1c, transparent 80%),
+    radial-gradient(ellipse 20% 38% at 51% 18%, #8067a31a, transparent 85%),
+    radial-gradient(ellipse 20% 32% at 81% 73%, #458e8515, transparent 85%),
     linear-gradient(90deg, #07080b40, transparent 30%, #07080b76 100%);
   pointer-events: none;
 }
@@ -940,6 +943,8 @@ body {
 }
 .atlas-workbench {
   grid-column: 2;
+  background:
+    radial-gradient(circle at 35% 0%, #52402c27, transparent 65%), #0d0d0e;
 }
 .graph-inspector {
   grid-column: 3;
@@ -1335,7 +1340,10 @@ body {
   position: relative;
   min-width: 0;
   padding: 20px 24px;
-  background: linear-gradient(115deg, #f0e3ca, #decbb0 74%, #ead9bc);
+  background:
+    repeating-linear-gradient(0deg, #50391c08 0 1px, transparent 1px 5px),
+    radial-gradient(circle at 55% 16%, #fff6dd, transparent 65%),
+    linear-gradient(115deg, #f0e3ca, #d9c3a2 74%, #e8d4b4);
   color: #2e241d;
   border: 1px solid #d9bc91;
   box-shadow:
@@ -1490,6 +1498,9 @@ body {
 .archive-detail-notes {
   overflow: auto;
   max-height: calc(100dvh - 167px);
+  background:
+    repeating-linear-gradient(0deg, #50391c08 0 1px, transparent 1px 5px),
+    linear-gradient(145deg, #f1e5d0, #d8c2a1);
 }
 .archive-panel-overline {
   font: 10px var(--cie-font-ui);
@@ -1568,7 +1579,30 @@ body {
 }
 @media (max-width: 1200px) {
   .atlas-selected-card {
-    max-height: 175px;
+    display: none;
+  }
+  .atlas-tools-toggle {
+    display: block;
+    position: absolute;
+    z-index: 6;
+    top: 9px;
+    right: 10px;
+    background: #20170f;
+    color: #f0d4a4;
+    border: 1px solid #9a7143;
+    padding: 6px 9px;
+    min-height: 32px;
+    cursor: pointer;
+    font-size: 10px;
+  }
+  .atlas-stage-controls {
+    display: none;
+    top: 44px;
+    right: 10px;
+    width: 145px;
+  }
+  .atlas-stage-controls.open {
+    display: grid;
   }
   .top-navigation {
     gap: 10px;
@@ -1864,32 +1898,6 @@ body {
     font-size: 11px;
   }
   .atlas-stage-caption strong {
-    display: none;
-  }
-  .atlas-tools-toggle {
-    display: block;
-    position: absolute;
-    z-index: 6;
-    top: 9px;
-    right: 10px;
-    background: #20170f;
-    color: #f0d4a4;
-    border: 1px solid #9a7143;
-    padding: 6px 9px;
-    min-height: 32px;
-    cursor: pointer;
-    font-size: 10px;
-  }
-  .atlas-stage-controls {
-    display: none;
-    top: 44px;
-    right: 10px;
-    width: 145px;
-  }
-  .atlas-stage-controls.open {
-    display: grid;
-  }
-  .atlas-selected-card {
     display: none;
   }
   .graph-stage-legend {

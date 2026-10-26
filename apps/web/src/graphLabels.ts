@@ -11,12 +11,13 @@ export function visibleLabelIds(
 ): Set<string> {
   const seen = new Set<string>();
   const boxes: { x: number; y: number }[] = [];
+  const horizontalMargin = Math.min(80, Math.max(60, width / 5));
   for (const item of [...candidates].sort(
     (a, b) => b.priority - a.priority || a.id.localeCompare(b.id),
   )) {
     if (
-      item.x < 80 ||
-      item.x > width - 80 ||
+      item.x < horizontalMargin ||
+      item.x > width - horizontalMargin ||
       item.y < 38 ||
       item.y > height - 55
     )

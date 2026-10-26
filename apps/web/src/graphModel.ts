@@ -1,12 +1,21 @@
 import type { FileEdge, FileNode, Graph } from "./graphApi";
 
 export type Point = [number, number, number];
-const directionLength = Math.hypot(0.55, 0.35, 0.76);
+const directionLength = Math.hypot(0.24, 0.38, 0.89);
 export const HOME_DIRECTION: Point = [
-  0.55 / directionLength,
-  0.35 / directionLength,
-  0.76 / directionLength,
+  0.24 / directionLength,
+  0.38 / directionLength,
+  0.89 / directionLength,
 ];
+export function initialCameraScale(
+  aspect: number,
+  fileCount: number,
+  moduleCount: number,
+): number {
+  // ponytail: fixed 80-file cutover; use measured occupancy if larger repos need closer framing.
+  if (fileCount > 80 || moduleCount > 4) return 1.05;
+  return aspect >= 2.05 ? 0.66 : aspect >= 1.85 ? 0.85 : 1.05;
+}
 export type Connection = {
   from: string;
   to: string;
@@ -112,13 +121,13 @@ export function layoutGraph(model: SceneModel): {
     count === 1
       ? [0, 0, 0]
       : [
-          ((index % 5) - (Math.min(count, 5) - 1) / 2) * step * 0.82,
+          ((index % 5) - (Math.min(count, 5) - 1) / 2) * step * 1.05,
           ((Math.floor(index / 5) % 5) -
             (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
             step +
-            ((index % 2) - 0.5) * step * 0.4,
+            ((index % 2) - 0.5) * step * 0.28,
           (Math.floor(index / 25) - (Math.ceil(count / 25) - 1) / 2) * step +
-            ((index % 3) - 1) * step * 0.26,
+            (1 - (index % 3)) * step * 0.26,
         ];
   const plus = (a: Point, b: Point): Point => [
     a[0] + b[0],
@@ -126,12 +135,16 @@ export function layoutGraph(model: SceneModel): {
     a[2] + b[2],
   ];
   const fileOffset = (index: number, count: number): Point => [
-    ((index % 4) - (Math.min(count, 4) - 1) / 2) * 2.1,
-    ((Math.floor(index / 4) % 4) -
-      (Math.min(Math.ceil(count / 4), 4) - 1) / 2) *
-      2.4,
-    (Math.floor(index / 16) - (Math.ceil(count / 16) - 1) / 2) * 2.2 +
-      ((index % 3) - 1) * 0.8,
+    ((index % 5) - (Math.min(count, 5) - 1) / 2) * 3.2,
+    ((Math.floor(index / 5) % 5) -
+      (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
+      2.7 +
+      ((index % 2) - 0.5) * 0.7,
+    ((Math.floor(index / 5) % 5) -
+      (Math.min(Math.ceil(count / 5), 5) - 1) / 2) *
+      2.1 +
+      (Math.floor(index / 25) - (Math.ceil(count / 25) - 1) / 2) * 3.6 +
+      ((index % 4) - 1.5) * 1.1,
   ];
   const roots = new Map<string, Map<string, Group[]>>();
   for (const group of model.groups) {
@@ -166,7 +179,10 @@ export function layoutGraph(model: SceneModel): {
             ) + 4;
           return { path: name, leaves: local, radius };
         });
-      const step = Math.max(19, ...children.map((child) => child.radius * 1.3));
+      const step = Math.max(
+        children.length <= 4 ? 34 : 19,
+        ...children.map((child) => child.radius * 1.3),
+      );
       const placed = children.map((child, index) => ({
         ...child,
         position: offset(index, children.length, step),
@@ -184,8 +200,17 @@ export function layoutGraph(model: SceneModel): {
     25,
     ...rootLayouts.map((root) => root.radius * 1.2),
   );
-  rootLayouts.forEach((root, rootIndex) => {
-    const rootPosition = offset(rootIndex, rootLayouts.length, rootStep);
+  const majorRoots = rootLayouts.filter((root) => root.path !== ".");
+  rootLayouts.forEach((root) => {
+    // A lone root-level file is context for the modules, not a distant galaxy.
+    const rootPosition: Point =
+      root.path === "." && majorRoots.length
+        ? [0, -Math.min(9, rootStep * 0.2), Math.min(6, rootStep * 0.15)]
+        : offset(
+            Math.max(0, majorRoots.indexOf(root)),
+            Math.max(1, majorRoots.length),
+            rootStep,
+          );
     if (
       root.path !== "." &&
       !(
@@ -260,8 +285,10 @@ export function homeDistance(
   points: Point[],
   center: Point,
   aspect: number,
+  direction: Point = HOME_DIRECTION,
 ): number {
-  const [dx, dy, dz] = HOME_DIRECTION;
+  const length = Math.hypot(...direction) || 1;
+  const [dx, dy, dz] = direction.map((component) => component / length);
   const horizontal = Math.hypot(dx, dz);
   const tanVertical = Math.tan((55 * Math.PI) / 360);
   const tanHorizontal = tanVertical * Math.max(0.1, aspect);
@@ -271,9 +298,13 @@ export function homeDistance(
     const y = point[1] - center[1];
     const z = point[2] - center[2];
     const depth = x * dx + y * dy + z * dz;
-    const right = (x * dz - z * dx) / horizontal;
+    const right = horizontal < 0.0001 ? x : (x * dz - z * dx) / horizontal;
     const up =
-      (y * horizontal * horizontal - dy * (x * dx + z * dz)) / horizontal;
+      horizontal < 0.0001
+        ? dy >= 0
+          ? -z
+          : z
+        : (y * horizontal * horizontal - dy * (x * dx + z * dz)) / horizontal;
     distance = Math.max(
       distance,
       depth +
@@ -281,4 +312,19 @@ export function homeDistance(
     );
   }
   return distance * 1.08 + 2;
+}
+
+export function dependencyArc(from: Point, to: Point): Point[] {
+  const dx = to[0] - from[0],
+    dy = to[1] - from[1],
+    dz = to[2] - from[2];
+  const lift = Math.min(11, Math.max(1.8, Math.hypot(dx, dy, dz) * 0.22));
+  return Array.from({ length: 17 }, (_, index): Point => {
+    const t = index / 16;
+    return [
+      from[0] + dx * t,
+      from[1] + dy * t + 4 * lift * t * (1 - t),
+      from[2] + dz * t,
+    ];
+  });
 }
