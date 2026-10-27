@@ -142,6 +142,8 @@ export function GraphFileTree({
               </span>
               {node.path === "." && <small>{file.path}</small>}
               {file.status === "failed" && <em>Parse failed</em>}
+              {file.status === "unsupported" && <em>Metadata only</em>}
+              {file.status === "skipped" && <em>Analysis skipped</em>}
             </button>
           </li>
         ))}

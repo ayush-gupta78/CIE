@@ -6,14 +6,19 @@ export type FileNode = {
   name: string;
   parent: string;
   language: string;
-  status: "parsed" | "failed";
-  sha256: string;
+  category?: string;
+  contentKind?: "text" | "binary" | "unknown";
+  sizeBytes?: number;
+  incomingCount?: number;
+  outgoingCount?: number;
+  status: "parsed" | "partial" | "failed" | "unsupported" | "skipped";
+  sha256?: string;
 };
 export type FileEdge = {
   id: string;
   from: string;
   to: string | null;
-  kind: "imports" | "reexports";
+  kind: "imports" | "reexports" | "includes" | "asset" | "config";
   resolution: "resolved_static" | "unresolved" | "external";
   specifier: string;
   evidence: {
@@ -44,6 +49,21 @@ export type Graph = {
   partial: boolean;
 };
 
+export function analysisDescription(file: FileNode): string {
+  if (file.status === "unsupported")
+    return "Not analyzed for this file format.";
+  if (file.status === "skipped")
+    return "Analysis skipped due to size or encoding limits.";
+  if (file.status === "failed") return "Dependency analysis failed.";
+  if (file.status === "partial")
+    return "Partially analyzed; other relationships may be unavailable.";
+  return "Static dependency analysis completed.";
+}
+export const categoryLabel = (file: FileNode): string =>
+  file.category
+    ? file.category[0].toUpperCase() + file.category.slice(1)
+    : "Source";
+
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === "string" && v.length > 0;
@@ -65,14 +85,30 @@ const file = (v: unknown): v is FileNode =>
   v.parent ===
     (v.path.includes("/") ? v.path.slice(0, v.path.lastIndexOf("/")) : ".") &&
   text(v.language) &&
-  (v.status === "parsed" || v.status === "failed") &&
-  text(v.sha256);
+  (v.category === undefined || text(v.category)) &&
+  (v.contentKind === undefined ||
+    v.contentKind === "text" ||
+    v.contentKind === "binary" ||
+    v.contentKind === "unknown") &&
+  (v.sizeBytes === undefined || count(v.sizeBytes)) &&
+  (v.incomingCount === undefined || count(v.incomingCount)) &&
+  (v.outgoingCount === undefined || count(v.outgoingCount)) &&
+  (v.status === "parsed" ||
+    v.status === "partial" ||
+    v.status === "failed" ||
+    v.status === "unsupported" ||
+    v.status === "skipped") &&
+  (v.sha256 === undefined || text(v.sha256));
 const edge = (v: unknown): v is FileEdge =>
   object(v) &&
   text(v.id) &&
   text(v.from) &&
   (v.to === null || text(v.to)) &&
-  (v.kind === "imports" || v.kind === "reexports") &&
+  (v.kind === "imports" ||
+    v.kind === "reexports" ||
+    v.kind === "includes" ||
+    v.kind === "asset" ||
+    v.kind === "config") &&
   (v.resolution === "resolved_static" ||
     v.resolution === "unresolved" ||
     v.resolution === "external") &&
@@ -134,6 +170,26 @@ function validated(value: unknown, repo: Selection): Graph {
         (e.resolution === "resolved_static"
           ? !e.to || !ids.has(e.to)
           : e.to !== null),
+    )
+  )
+    throw new ApiError(
+      "INVALID_RESPONSE",
+      "Local API returned an invalid graph.",
+    );
+  const incoming = new Map([...ids].map((id) => [id, 0]));
+  const outgoing = new Map([...ids].map((id) => [id, 0]));
+  for (const e of value.edges as FileEdge[]) {
+    if (e.resolution !== "resolved_static" || !e.to) continue;
+    outgoing.set(e.from, outgoing.get(e.from)! + 1);
+    incoming.set(e.to, incoming.get(e.to)! + 1);
+  }
+  if (
+    (value.files as FileNode[]).some(
+      (f) =>
+        (f.incomingCount !== undefined &&
+          f.incomingCount !== incoming.get(f.id)) ||
+        (f.outgoingCount !== undefined &&
+          f.outgoingCount !== outgoing.get(f.id)),
     )
   )
     throw new ApiError(

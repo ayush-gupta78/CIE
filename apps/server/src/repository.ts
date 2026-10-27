@@ -14,8 +14,9 @@ import ignore from "ignore";
 import type { FastifyInstance } from "fastify";
 import {
   buildGraph,
+  classify,
   GraphLimitError,
-  isSupportedSource,
+  isAnalyzedSource,
   type Graph,
   type Source,
 } from "./graph.js";
@@ -444,23 +445,21 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
             path.length > 1024 ||
             /[\\%\0]/.test(entry.name) ||
             next.length > MAX_DEPTH
-          ) {
-            skipped++;
-            continue;
-          }
+          )
+            throw new RepoError(
+              422,
+              "ANALYSIS_LIMIT",
+              "A file path exceeds the supported graph path contract.",
+            );
           if (entry.kind === "directory") {
             stack.push(next);
-            continue;
-          }
-          if (!isSupportedSource(path)) {
-            skipped++;
             continue;
           }
           if (sources.length >= 200)
             throw new RepoError(
               422,
               "ANALYSIS_LIMIT",
-              "Source file limit exceeded.",
+              "File limit exceeded; no partial graph was published.",
             );
           const candidate = resolve(current, entry.name);
           let handle;
@@ -472,15 +471,38 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
               !contained(selected.root, await realpath(candidate))
             )
               continue;
+            const metadata = {
+              path,
+              sizeBytes: before.size,
+              mtimeMs: before.mtimeMs,
+            };
+            if (!isAnalyzedSource(path)) {
+              sources.push({
+                ...metadata,
+                contentKind: classify(path).contentKind,
+              });
+              continue;
+            }
             if (
               before.size > 1024 * 1024 ||
               bytes + before.size > 8 * 1024 * 1024
-            )
+            ) {
+              if (!/\.(?:[cm]?[jt]s|jsx|tsx)$/i.test(path)) {
+                sources.push({
+                  ...metadata,
+                  analysisSkipped: true,
+                  contentKind: classify(path).contentKind,
+                });
+                skippedDiagnostics.push({ path, code: "ANALYSIS_SIZE_LIMIT" });
+                skipped++;
+                continue;
+              }
               throw new RepoError(
                 422,
                 "ANALYSIS_LIMIT",
                 "Source byte limit exceeded.",
               );
+            }
             handle = await open(
               candidate,
               constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
@@ -537,9 +559,14 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
             if (!validText) {
               skipped++;
               skippedDiagnostics.push({ path, code: "UNSUPPORTED_ENCODING" });
+              sources.push({
+                ...metadata,
+                analysisSkipped: true,
+                contentKind: "binary",
+              });
               continue;
             }
-            sources.push({ path, bytes: captured });
+            sources.push({ ...metadata, bytes: captured, contentKind: "text" });
             bytes += length;
           } catch (error) {
             throw error instanceof RepoError ? error : fsError(error);

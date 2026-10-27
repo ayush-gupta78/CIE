@@ -1,4 +1,4 @@
-import type { FileNode, Graph } from "./graphApi";
+import { analysisDescription, type FileNode, type Graph } from "./graphApi";
 import type { SceneModel } from "./graphModel";
 
 type Props = {
@@ -21,14 +21,16 @@ export function GraphWorkbench({
     <section className="atlas-workbench" aria-label="File workbench">
       <div className="atlas-panel-heading">
         <span>File context</span>
-        <span>Verified source graph</span>
+        <span>Verified local graph</span>
       </div>
       {selected ? (
         <>
           <div className="atlas-file-tab">
             <span className="atlas-file-symbol" aria-hidden="true" />{" "}
             {selected.name}
-            <span className="atlas-tab-state">{selected.status}</span>
+            <span className="atlas-tab-state">
+              {selected.category ?? selected.status}
+            </span>
           </div>
           <div className="atlas-file-intro">
             <h2>{selected.name}</h2>
@@ -39,7 +41,7 @@ export function GraphWorkbench({
           </div>
           <div className="atlas-evidence-surface">
             <div className="atlas-code-ruler">
-              Captured declaration evidence{" "}
+              Static relationship evidence{" "}
               <span>
                 {outgoing.length} outgoing · {incoming.length} incoming
               </span>
@@ -53,7 +55,7 @@ export function GraphWorkbench({
                     </span>
                     <span>
                       <strong>
-                        {edge.kind === "reexports" ? "export from" : "import"}
+                        {edge.kind === "reexports" ? "export from" : edge.kind}
                       </strong>{" "}
                       {edge.specifier}
                       <small>
@@ -66,12 +68,14 @@ export function GraphWorkbench({
               </ol>
             ) : (
               <p className="atlas-evidence-empty">
-                No verified outgoing declarations in this file.
+                {selected.status === "parsed"
+                  ? "No verified outgoing declarations in this file."
+                  : analysisDescription(selected)}
               </p>
             )}
             <p className="atlas-source-lock">
-              Source preview is planned for M6. These rows are M2 declaration
-              evidence, not file contents.
+              Source preview is planned for M6. These rows are captured static
+              relationship evidence, not file contents.
             </p>
           </div>
         </>
@@ -80,7 +84,7 @@ export function GraphWorkbench({
           <h2>Select a file to investigate.</h2>
           <p>
             Choose a marker, path in the explorer, or verified connection. The
-            workbench will show only captured M2 evidence.
+            workbench will show only captured static evidence.
           </p>
           <span>Source preview arrives in M6</span>
         </div>
@@ -141,8 +145,8 @@ export function GraphNeighborhood({
           </ul>
           {!unique.length && <p>No verified one-hop file relationships.</p>}
           <p className="atlas-neighborhood-note">
-            Only resolved static imports and re-exports. This is a list, not the
-            M4 2D map.
+            Only verified local relationships. This is a list, not the M4 2D
+            map.
           </p>
         </>
       ) : (

@@ -134,6 +134,77 @@ it("offers explicit analysis, then syncs search, file list and graph-only inspec
   ).toBe(true);
 });
 
+it("keeps disconnected binary and unknown files searchable with truthful inspection", async () => {
+  const universal: Graph = {
+    ...graph,
+    files: [
+      ...graph.files,
+      {
+        id: "png",
+        path: "assets/logo.png",
+        name: "logo.png",
+        parent: "assets",
+        language: "Image",
+        category: "image",
+        contentKind: "binary",
+        sizeBytes: 5,
+        status: "unsupported",
+      },
+      {
+        id: "custom",
+        path: "assets/mystery.custom",
+        name: "mystery.custom",
+        parent: "assets",
+        language: "Unknown",
+        category: "unknown",
+        contentKind: "unknown",
+        sizeBytes: 0,
+        status: "unsupported",
+      },
+    ],
+    counts: { ...graph.counts, files: 4 },
+    partial: true,
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(universal)));
+  const user = userEvent.setup();
+  render(
+    <GraphPage
+      repository={repo}
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByText(/4 files.*1 verified connection/)).toBeTruthy(),
+  );
+  await user.type(
+    screen.getByRole("searchbox", { name: "Search files" }),
+    "logo.png",
+  );
+  const tree = screen.getByRole("list", { name: "Graph files" });
+  await user.click(
+    within(tree).getByRole("button", { name: "assets/logo.png" }),
+  );
+  const inspector = screen.getByRole("complementary", {
+    name: "Graph file details",
+  });
+  expect(within(inspector).getAllByText("Image").length).toBeGreaterThan(0);
+  expect(within(inspector).getByText("5 bytes")).toBeTruthy();
+  expect(
+    within(inspector).getByText(/Not analyzed for this file format/),
+  ).toBeTruthy();
+  expect(within(inspector).getByText("assets/logo.png")).toBeTruthy();
+  await user.clear(screen.getByRole("searchbox", { name: "Search files" }));
+  await user.type(
+    screen.getByRole("searchbox", { name: "Search files" }),
+    "mystery.custom",
+  );
+  await user.click(
+    within(tree).getByRole("button", { name: "assets/mystery.custom" }),
+  );
+  expect(within(inspector).getAllByText("Unknown").length).toBeGreaterThan(0);
+});
+
 it("opens real M2 declarations in the detail scaffold and follows a directed dependency", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
   const user = userEvent.setup();
@@ -210,7 +281,7 @@ it("resolves a repository-explorer path to the same file detail, without inventi
       onOpenRepository={() => {}}
     />,
   );
-  expect(screen.getByText(/not in the supported M2 source graph/)).toBeTruthy();
+  expect(screen.getByText(/not in the current analyzed graph/)).toBeTruthy();
   expect(screen.queryByRole("region", { name: "File detail" })).toBeNull();
 });
 
@@ -301,7 +372,7 @@ it("shows a usable data alternative when WebGL is unavailable", async () => {
   expect(screen.getByRole("list", { name: "Graph files" })).toBeTruthy();
 });
 
-it("shows an honest zero-source state and partial parse diagnostics", async () => {
+it("shows an honest zero-file state and partial parse diagnostics", async () => {
   const empty: Graph = {
     ...graph,
     files: [],
@@ -319,7 +390,7 @@ it("shows an honest zero-source state and partial parse diagnostics", async () =
     />,
   );
   await waitFor(() =>
-    expect(screen.getByText("No supported source files.")).toBeTruthy(),
+    expect(screen.getByText("No eligible files.")).toBeTruthy(),
   );
   expect(screen.queryByText("services/entry.ts")).toBeNull();
   view.unmount();

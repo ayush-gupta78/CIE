@@ -57,11 +57,14 @@ it("renders an honest archive landing with a real navigation path and deferred f
     expect(screen.getAllByText("Connected").length).toBeGreaterThan(0),
   );
   await userEvent.click(graph);
-  await waitFor(() =>
-    expect(
-      screen.getByRole("heading", { name: "No repository selected." }),
-    ).toBeTruthy(),
-  );
+  // The atlas is lazy-loaded; CI's cold transform can exceed waitFor's 1s default.
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "No repository selected." },
+      { timeout: 5000 },
+    ),
+  ).toBeTruthy();
 });
 
 it("shows offline status and reconnects on retry", async () => {

@@ -80,6 +80,50 @@ it("resolves a TypeScript source imported with its emitted .js specifier", () =>
   );
 });
 
+it("resolves an exact local Java class without turning platform imports into files", () => {
+  const graph = buildGraph(
+    [
+      source(
+        "src/main/java/example/Main.java",
+        "import example.Helper;\nimport java.util.List;\n",
+      ),
+      source("src/main/java/example/Helper.java", "class Helper {}\n"),
+    ],
+    "repo",
+    1,
+    0,
+  );
+  expect(graph.edges).toContainEqual(
+    expect.objectContaining({
+      from: graph.files.find((file) => file.path.endsWith("Main.java"))!.id,
+      to: graph.files.find((file) => file.path.endsWith("Helper.java"))!.id,
+      kind: "imports",
+      resolution: "resolved_static",
+    }),
+  );
+  expect(graph.edges.every((edge) => edge.specifier !== "java.util.List")).toBe(
+    true,
+  );
+});
+
+it("does not treat commented or docstring-only references as relationships", () => {
+  const graph = buildGraph(
+    [
+      source(
+        "src/main.py",
+        '"""\nfrom .helper import value\n"""\n# from .helper import value\n',
+      ),
+      source("src/helper.py", "value = 1\n"),
+      source("src/index.html", '<!-- <img src="logo.png"> -->'),
+      source("src/logo.png", "not actually an image"),
+    ],
+    "repo",
+    1,
+    0,
+  );
+  expect(graph.edges).toEqual([]);
+});
+
 it("keeps valid siblings when pathological nesting defeats the AST parser", () => {
   const graph = buildGraph(
     [
@@ -129,6 +173,7 @@ it("marks dynamic-only connectivity as partial", () => {
     0,
   );
   expect(graph.edges).toHaveLength(0);
+  expect(graph.files[0].status).toBe("partial");
   expect(graph.diagnostics).toContainEqual({
     path: "src/a.ts",
     code: "DYNAMIC_IMPORT",
@@ -151,7 +196,7 @@ it("reports import-equals require and qualified aliases without inventing edges"
     0,
   );
   expect(graph.files.find((file) => file.path === "src/main.ts")?.status).toBe(
-    "parsed",
+    "partial",
   );
   expect(graph.edges).toEqual([]);
   expect(graph.diagnostics).toEqual([
@@ -171,7 +216,7 @@ it("keeps supported imports alongside unsupported import-equals with stable outp
   ];
   const graph = buildGraph(sources, "repo", 1, 0);
   expect(graph.schemaVersion).toBe(1);
-  expect(graph.analyzerVersion).toBe("m2-ts-2");
+  expect(graph.analyzerVersion).toBe("m3-universal-1");
   expect(graph.edges.map((edge) => edge.kind)).toEqual([
     "imports",
     "reexports",

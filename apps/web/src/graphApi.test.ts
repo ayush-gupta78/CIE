@@ -62,6 +62,10 @@ it("rejects wrong schema, mismatched selection and malformed graph edges", async
     { ...graph, schemaVersion: 2 },
     { ...graph, revision: 1 },
     { ...graph, repositoryId: "other" },
+    {
+      ...graph,
+      files: [{ ...graph.files[0], incomingCount: 99, outgoingCount: 0 }],
+    },
     { ...graph, files: [{ ...graph.files[0], path: "../escape" }] },
     {
       ...graph,

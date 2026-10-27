@@ -42,6 +42,21 @@ const floor = new MeshStandardMaterial({
   metalness: 0.58,
   roughness: 0.43,
 });
+const categoryMaterials = new Map(
+  Object.entries({
+    source: "#d4ad72",
+    web: "#79b9d3",
+    data: "#81beb0",
+    documentation: "#c6b8df",
+    configuration: "#aeb9d6",
+    database: "#b1c78d",
+    image: "#8dc7c2",
+    font: "#c5a6c8",
+    media: "#a3b3cf",
+    binary: "#a9a6b1",
+    unknown: "#989da5",
+  }).map(([category, color]) => [category, new MeshBasicMaterial({ color })]),
+);
 
 // Stable decorative variation, never a file metric or a second selectable node.
 function dimensions(file: FileNode, unit: number) {
@@ -120,6 +135,14 @@ function FileBuilding({
         position={[0, h * 0.51, w * 0.22]}
         scale={[w * 0.08, h * 0.86, w * 0.08]}
         material={accent}
+      />
+      <Beam
+        position={[0, h * 0.84, w * 0.57]}
+        scale={[w * 0.2, w * 0.2, 0.04]}
+        material={
+          categoryMaterials.get(file.category ?? "source") ??
+          categoryMaterials.get("unknown")!
+        }
       />
       <Beam
         position={[0, h * 0.21, w * 0.54]}
@@ -346,7 +369,7 @@ function CameraRig({
     initialCameraScale(
       aspectRef.current,
       model.files.length,
-      layout.zones.length,
+      model.groups.length,
     ),
   );
   useEffect(() => {
@@ -374,11 +397,11 @@ function CameraRig({
         const scale = initialCameraScale(
           aspectRef.current,
           model.files.length,
-          layout.zones.length,
+          model.groups.length,
         );
         if (scale !== previousScale.current) {
           controls.target.set(
-            layout.center[0] + layout.radius * 0.12,
+            layout.center[0] + (scale < 1 ? layout.radius * 0.12 : 0),
             layout.center[1] + 1.2,
             layout.center[2],
           );
@@ -409,10 +432,11 @@ function CameraRig({
     const scale = initialCameraScale(
       aspectRef.current,
       model.files.length,
-      layout.zones.length,
+      model.groups.length,
     );
     const center = new Vector3(
-      layout.center[0] + (cameraCommand === "fit" ? 0 : layout.radius * 0.12),
+      layout.center[0] +
+        (cameraCommand === "fit" || scale >= 1 ? 0 : layout.radius * 0.12),
       layout.center[1] + 2.4,
       layout.center[2],
     );
@@ -497,7 +521,7 @@ function CameraRig({
     if (!controls) return;
     const direction = camera.position.clone().sub(controls.target).normalize();
     const distance = Math.max(
-      9,
+      model.files.length > 80 ? 23 : 11,
       homeDistance(bounds, center, aspectRef.current, [
         direction.x,
         direction.y,
@@ -751,7 +775,10 @@ function SpatialGraph({
                 center
                 style={{
                   pointerEvents: "none",
-                  visibility: selectedId ? "hidden" : "visible",
+                  visibility:
+                    selectedId || model.files.length > 80
+                      ? "hidden"
+                      : "visible",
                 }}
               >
                 <span className="graph-zone-label" title={zone.path}>
@@ -805,7 +832,7 @@ function SpatialGraph({
                 />
               </group>
             ))}
-            {layout.groups.length <= 28 &&
+            {layout.groups.length <= 6 &&
               !layout.zones.some(
                 (zone) =>
                   group.path === zone.path ||

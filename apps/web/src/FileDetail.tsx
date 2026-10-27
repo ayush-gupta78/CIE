@@ -1,4 +1,9 @@
-import type { FileNode, Graph } from "./graphApi";
+import {
+  analysisDescription,
+  categoryLabel,
+  type FileNode,
+  type Graph,
+} from "./graphApi";
 import type { SceneModel } from "./graphModel";
 import { GraphFileTree } from "./GraphFileTree";
 import { Crest } from "./Crest";
@@ -60,8 +65,17 @@ export function FileDetail({
             <dd>{file.language}</dd>
           </div>
           <div>
-            <dt>Parse status</dt>
-            <dd>{file.status}</dd>
+            <dt>Category / size</dt>
+            <dd>
+              {categoryLabel(file)} ·{" "}
+              {file.sizeBytes === undefined
+                ? "Unknown size"
+                : `${file.sizeBytes.toLocaleString()} bytes`}
+            </dd>
+          </div>
+          <div>
+            <dt>Dependency analysis</dt>
+            <dd>{analysisDescription(file)}</dd>
           </div>
           <div>
             <dt>Verified declarations</dt>
@@ -80,7 +94,7 @@ export function FileDetail({
         >
           <div className="archive-editor-heading">
             <span>{file.path}</span>
-            <span>M2 static analysis</span>
+            <span>Static relationship evidence</span>
           </div>
           {outgoing.length ? (
             <ol>
@@ -90,7 +104,7 @@ export function FileDetail({
                     {edge.evidence.line}:{edge.evidence.column}
                   </span>
                   <span>
-                    <b>{edge.kind === "reexports" ? "re-export" : "import"}</b>{" "}
+                    <b>{edge.kind === "reexports" ? "re-export" : edge.kind}</b>{" "}
                     <em>{edge.specifier}</em>
                     <small>→ {byId.get(edge.to ?? "")?.path}</small>
                   </span>
@@ -98,7 +112,11 @@ export function FileDetail({
               ))}
             </ol>
           ) : (
-            <p>No verified outgoing declarations in this file.</p>
+            <p>
+              {file.status === "parsed"
+                ? "No verified outgoing declarations in this file."
+                : analysisDescription(file)}
+            </p>
           )}
           <div className="archive-source-unavailable">
             Source preview is planned for M6. No source bytes are loaded here.
@@ -113,8 +131,8 @@ export function FileDetail({
         <div className="archive-panel-overline">Verified file evidence</div>
         <h2>Relationships</h2>
         <p className="archive-ink-copy">
-          Only resolved static imports and re-exports from the selected
-          repository revision appear here.
+          Only verified local relationships from the selected repository
+          revision appear here.
         </p>
         <section>
           <h3>
@@ -158,7 +176,7 @@ export function FileDetail({
           <Crest />
           <p>
             AI notes and source inspection are planned for M7 and M6. This view
-            contains only M2 graph evidence.
+            contains only verified graph evidence and file metadata.
           </p>
         </div>
       </aside>

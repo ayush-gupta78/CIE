@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeRepository, getGraph, type Graph } from "./graphApi";
+import {
+  analysisDescription,
+  analyzeRepository,
+  categoryLabel,
+  getGraph,
+  type Graph,
+} from "./graphApi";
 import { layoutGraph, projectGraph } from "./graphModel";
 import { GraphScene3D, supportsWebGL } from "./GraphScene3D";
 import { GraphFileTree } from "./GraphFileTree";
@@ -364,8 +370,8 @@ export function GraphPage({
               )) && (
               <p className="atlas-unavailable-file" role="status">
                 {visibleGraph
-                  ? `${initialPath} is not in the supported M2 source graph. Use Repository for its filesystem metadata; source reading is planned for M6.`
-                  : `To inspect ${initialPath}, analyze this repository first. Only supported M2 source files have dependency evidence.`}
+                  ? `${initialPath} is not in the current analyzed graph. Use Repository for its filesystem metadata; source reading is planned for M6.`
+                  : `To inspect ${initialPath}, analyze this repository first. Dependency evidence is available only for supported formats.`}
               </p>
             )}
           <div className="graph-compact-tabs" aria-label="Graph panels">
@@ -441,7 +447,7 @@ export function GraphPage({
                   </small>
                 </div>
                 <p className="graph-panel-note">
-                  Analyzed source files only. Expand a folder or search for a
+                  Eligible repository files. Expand a folder or search for a
                   path.
                 </p>
                 {visibleGraph && (
@@ -468,38 +474,30 @@ export function GraphPage({
                   <span>Spatial source atlas</span>
                   <strong>{repository.rootName}</strong>
                 </div>
-                {model && layout && layout.zones.length > 0 && (
+                {model && layout && model.groups.length > 0 && (
                   <div
                     className="atlas-module-key"
                     aria-label="Analyzed directory modules"
                   >
                     <span>Mapped directories</span>
-                    {layout.zones
-                      .filter(
-                        (zone) =>
-                          !layout.zones.some((child) =>
-                            child.path.startsWith(`${zone.path}/`),
-                          ),
+                    {[...model.groups]
+                      .sort(
+                        (a, b) =>
+                          b.files.length - a.files.length ||
+                          a.path.localeCompare(b.path),
                       )
                       .slice(0, 6)
-                      .map((zone) => (
+                      .map((group) => (
                         <div
-                          key={zone.path}
-                          style={{ borderColor: zone.color }}
+                          key={group.path}
+                          style={{ borderColor: group.color }}
                         >
                           <i
-                            style={{ backgroundColor: zone.color }}
+                            style={{ backgroundColor: group.color }}
                             aria-hidden="true"
                           />
-                          {zone.path}
-                          <small>
-                            {
-                              model.files.filter((file) =>
-                                file.path.startsWith(`${zone.path}/`),
-                              ).length
-                            }{" "}
-                            files
-                          </small>
+                          {group.path === "." ? "root" : group.path}
+                          <small>{group.files.length} files</small>
                         </div>
                       ))}
                   </div>
@@ -549,12 +547,12 @@ export function GraphPage({
                       {loading || analyzing
                         ? "Reading real files…"
                         : visibleGraph
-                          ? "No supported source files."
+                          ? "No eligible files."
                           : "A graph begins with source."}
                     </h2>
                     <p>
                       {visibleGraph
-                        ? "This analysis found no supported TypeScript or JavaScript files."
+                        ? "No files were found within the permitted analysis scope."
                         : "Run analysis after selecting a repository. No sample files are shown."}
                     </p>
                   </div>
@@ -646,8 +644,8 @@ export function GraphPage({
                 </div>
                 <div className="graph-stage-legend" aria-label="Graph legend">
                   <span>
-                    <i className="legend-out" /> Verified imports / re-exports:
-                    importer → referenced file
+                    <i className="legend-out" /> Verified local relationships:
+                    referencing file → referenced file
                   </span>
                   <span>
                     <i className="legend-in" /> Gold: uses · Blue: referenced by
@@ -702,9 +700,21 @@ export function GraphPage({
                     </div>
                     <dl>
                       <dt>Type</dt>
-                      <dd>File · {selected.name.split(".").at(-1)}</dd>
-                      <dt>Language</dt>
+                      <dd>File · {selected.category ?? "source"}</dd>
+                      <dt>Category</dt>
+                      <dd>{categoryLabel(selected)}</dd>
+                      <dt>Language / format</dt>
                       <dd>{selected.language}</dd>
+                      <dt>Directory</dt>
+                      <dd>{selected.parent}</dd>
+                      <dt>Size</dt>
+                      <dd>
+                        {selected.sizeBytes === undefined
+                          ? "Unknown"
+                          : `${selected.sizeBytes.toLocaleString()} bytes`}
+                      </dd>
+                      <dt>Dependency analysis</dt>
+                      <dd>{analysisDescription(selected)}</dd>
                       <dt>Parse status</dt>
                       <dd>{selected.status}</dd>
                     </dl>
