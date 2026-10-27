@@ -87,7 +87,7 @@ export function Workspace({
             <br />
             Snapshot
           </strong>
-          <span>Not available in the local M3 release.</span>
+          <span>Not available in this local release.</span>
           <span className="archive-action-arrow" aria-hidden="true" />
         </button>
       </div>

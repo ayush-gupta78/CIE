@@ -4,6 +4,7 @@ import { App } from "./App";
 import "./tokens.css";
 import "./styles.css";
 import "./atlas.css";
+import "./graph2d.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

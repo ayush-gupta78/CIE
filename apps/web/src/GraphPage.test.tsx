@@ -100,8 +100,8 @@ it("offers explicit analysis, then syncs search, file list and graph-only inspec
     expect(screen.getByText(/2 files.*1 verified connection/)).toBeTruthy(),
   );
   expect(
-    screen.getByRole("button", { name: /2D.*M4/ }).hasAttribute("disabled"),
-  ).toBe(true);
+    screen.getByRole("button", { name: "2D Graph" }).hasAttribute("disabled"),
+  ).toBe(false);
   await user.type(
     screen.getByRole("searchbox", { name: "Search files" }),
     "services/",
@@ -248,7 +248,9 @@ it("opens real M2 declarations in the detail scaffold and follows a directed dep
     }),
   ).toBeTruthy();
   expect(within(notes).getByText("Referenced by")).toBeTruthy();
-  await user.click(within(detail).getByRole("button", { name: "3D atlas" }));
+  await user.click(
+    within(detail).getByRole("button", { name: "Graph workspace" }),
+  );
   expect(
     screen.getByRole("complementary", { name: "Graph file details" })
       .textContent,

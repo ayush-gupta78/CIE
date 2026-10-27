@@ -98,6 +98,10 @@ it("supports keyboard navigation through live links while skipping deferred dest
     document.activeElement,
   );
   await user.tab();
+  expect(screen.getByRole("button", { name: "2D Graph" })).toBe(
+    document.activeElement,
+  );
+  await user.tab();
   expect(screen.getByRole("button", { name: "Settings" })).toBe(
     document.activeElement,
   );

@@ -1,0 +1,143 @@
+/* The map is independent SVG geometry over the existing atlas stage. */
+.graph-2d-layer {
+  position: absolute;
+  inset: 48px 178px 42px 12px;
+  z-index: 3;
+  visibility: hidden;
+  pointer-events: none;
+}
+.graph-3d-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.graph-3d-layer:not(.active) * {
+  pointer-events: none !important;
+}
+.graph-3d-layer.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.graph-2d-layer.active {
+  visibility: visible;
+  pointer-events: auto;
+}
+.graph-2d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.graph-2d svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #080b0e;
+  border: 1px solid #55452f;
+  touch-action: none;
+  cursor: grab;
+}
+.graph-2d svg:active {
+  cursor: grabbing;
+}
+.graph-2d-directory rect {
+  fill: #151a20;
+  fill-opacity: 0.83;
+  stroke: currentColor;
+  stroke-opacity: 0.48;
+  stroke-width: 1;
+}
+.graph-2d-directory text {
+  fill: #dac9a9;
+  font: 12px var(--cie-font-code);
+  pointer-events: none;
+}
+.graph-2d-empty {
+  fill: #dac9a9;
+  font: 13px var(--cie-font-code);
+}
+.graph-2d-edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-opacity: 0.85;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.graph-2d-edge.dim {
+  stroke-opacity: 0.13;
+}
+.graph-2d-file {
+  cursor: pointer;
+}
+.graph-2d-file rect {
+  fill: #0c1015;
+  stroke: #6c6257;
+  stroke-width: 1;
+}
+.graph-2d-file text {
+  fill: #f0e4d0;
+  font: 12px var(--cie-font-code);
+  pointer-events: none;
+}
+.graph-2d-file.selected rect {
+  fill: #42301e;
+  stroke: #f0c98b;
+  stroke-width: 2;
+}
+.graph-2d-file.outgoing rect {
+  stroke: #f0c98b;
+}
+.graph-2d-file.incoming rect {
+  stroke: #87b7ee;
+}
+.graph-2d-file:focus-visible {
+  outline: none;
+}
+.graph-2d-file:focus-visible rect {
+  stroke: #fff2c7;
+  stroke-width: 3;
+}
+.graph-2d-scale {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 5px 7px;
+  color: #d8c7a9;
+  background: #090b0ee8;
+  border: 1px solid #594730;
+  font: 10px var(--cie-font-code);
+  pointer-events: none;
+}
+.graph-2d-zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 4px;
+}
+.graph-2d-zoom button {
+  min-width: 36px;
+  min-height: 36px;
+  color: #f0d8ac;
+  background: #1b1a19;
+  border: 1px solid #a3814f;
+  cursor: pointer;
+}
+.graph-stage-2d .atlas-module-key,
+.graph-stage-2d .atlas-selected-card {
+  display: none;
+}
+@media (max-width: 1200px) {
+  .graph-2d-layer {
+    right: 12px;
+  }
+}
+@media (max-width: 700px) {
+  .graph-2d-layer {
+    inset: 55px 8px 55px;
+  }
+  .graph-2d-scale {
+    font-size: 9px;
+  }
+}

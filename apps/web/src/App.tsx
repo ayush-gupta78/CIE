@@ -20,13 +20,13 @@ const GraphPage = lazy(() =>
 );
 
 const future = [
-  { label: "2D Graph", milestone: "M4", icon: "graph" as const },
   { label: "Analysis", milestone: "M5", icon: "analysis" as const },
   { label: "Assistant", milestone: "M7", icon: "assistant" as const },
 ];
 
 export function App() {
   const [page, setPage] = useState<Page>("workspace");
+  const [graphMode, setGraphMode] = useState<"3d" | "2d">("3d");
   const { connection, version, check } = useLocalHealth();
   const [repository, setRepository] = useState<Selection | null | undefined>(
     undefined,
@@ -130,13 +130,28 @@ export function App() {
           </button>
           <button
             type="button"
-            aria-current={page === "graph" ? "page" : undefined}
+            aria-current={
+              page === "graph" && graphMode === "3d" ? "page" : undefined
+            }
             onClick={() => {
+              setGraphMode("3d");
               setInitialFilePath(null);
               setPage("graph");
             }}
           >
             3D atlas
+          </button>
+          <button
+            type="button"
+            aria-current={
+              page === "graph" && graphMode === "2d" ? "page" : undefined
+            }
+            onClick={() => {
+              setGraphMode("2d");
+              setPage("graph");
+            }}
+          >
+            2D Graph
           </button>
           <button type="button" disabled title="Available in M5">
             Findings <small>M5</small>
@@ -191,14 +206,30 @@ export function App() {
             </button>
             <button
               type="button"
-              className={`nav-item ${page === "graph" ? "active" : ""}`}
-              aria-current={page === "graph" ? "page" : undefined}
+              className={`nav-item ${page === "graph" && graphMode === "3d" ? "active" : ""}`}
+              aria-current={
+                page === "graph" && graphMode === "3d" ? "page" : undefined
+              }
               onClick={() => {
+                setGraphMode("3d");
                 setInitialFilePath(null);
                 setPage("graph");
               }}
             >
               <NavGlyph name="graph" /> 3D Map
+            </button>
+            <button
+              type="button"
+              className={`nav-item ${page === "graph" && graphMode === "2d" ? "active" : ""}`}
+              aria-current={
+                page === "graph" && graphMode === "2d" ? "page" : undefined
+              }
+              onClick={() => {
+                setGraphMode("2d");
+                setPage("graph");
+              }}
+            >
+              <NavGlyph name="graph" /> 2D Graph
             </button>
             {future.map(({ label, milestone, icon }) => (
               <button
@@ -251,6 +282,7 @@ export function App() {
               repository={repository}
               onOpenRepository={() => setPage("repository")}
               onOpenGraph={() => {
+                setGraphMode("3d");
                 setInitialFilePath(null);
                 setPage("graph");
               }}
@@ -275,6 +307,8 @@ export function App() {
                 repository={repository}
                 initialPath={initialFilePath}
                 connection={connection}
+                mode={graphMode}
+                onModeChange={setGraphMode}
                 onOpenRepository={() => setPage("repository")}
                 onStale={onStale}
               />
@@ -338,7 +372,7 @@ export function App() {
                     setPage("graph");
                   }}
                 >
-                  Open file evidence in 3D atlas
+                  Open file evidence in graph workspace
                 </button>
               </div>
             ) : (

@@ -280,8 +280,8 @@ export function RepositoryPage({
       <p className="kicker">Local exploration</p>
       <h1 id="repository-title">Explore a local codebase.</h1>
       <p className="intro-copy">
-        Browse real files and folders here. Open Graph to analyze supported
-        source files and explore verified dependencies in 3D.
+        Browse real files and folders here. Open the 3D or 2D graph to analyze
+        eligible files and explore verified dependencies.
       </p>
       {showForm && (
         <form

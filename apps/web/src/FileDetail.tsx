@@ -47,7 +47,7 @@ export function FileDetail({
         <div className="archive-paper-corner" aria-hidden="true" />
         <nav className="archive-breadcrumb" aria-label="File path">
           <button type="button" onClick={onClose}>
-            3D atlas
+            Graph workspace
           </button>
           <span>/</span>
           <span>{file.parent === "." ? "root" : file.parent}</span>

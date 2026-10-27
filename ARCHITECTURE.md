@@ -1,10 +1,10 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. M0–M2 history and current M3 implementation are described below.
+> Living decision record. M0–M3 history and current M4 implementation are described below.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0–M2 owner-approved; M3 true-3D graph and owner-verified visual redesign implemented, awaiting independent owner review.
+- **Stage:** M0–M2 owner-approved; M3 temporarily owner-approved on 2026-10-27; M4 implemented, awaiting independent owner review.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
 - **Current date for decision log:** 2026-10-26
@@ -109,18 +109,18 @@ The following bullets record the prior visual contract. **ADR-022 (2026-10-26) s
 
 ## Milestones and deliverables
 
-| Milestone | Scope                                                                                   | Gate                                                              |
-| --------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs        | install/dev/build/typecheck/lint/tests run; truthful local status |
-| **M1**    | local repository ingestion, directory tree, ignore handling                             | browse a real local repo                                          |
-| **M2**    | import/relationship parser and graph model — owner-approved                             | explainable nodes & edges; tests and real-repo trial below        |
-| **M3**    | interactive 3D file graph, camera and labels — implemented, awaiting independent review | browse real dependencies in spatial depth                         |
-| **M4**    | alternate 2D graph and synchronized navigation                                          | both modes operate on same graph                                  |
-| **M5**    | non-LLM code intelligence                                                               | dependency metrics, impact and cycles                             |
-| **M6**    | file inspector and source references                                                    | accurate source/detail navigation                                 |
-| **M7**    | optional LLM adapter/retrieval                                                          | explicit opt-in, grounded explanations                            |
-| **M8**    | performance, security hardening, DX                                                     | realistic repo scale and robust failures                          |
-| **M9**    | tests, docs, distribution/release                                                       | runnable tested v1.0                                              |
+| Milestone | Scope                                                                               | Gate                                                              |
+| --------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs    | install/dev/build/typecheck/lint/tests run; truthful local status |
+| **M1**    | local repository ingestion, directory tree, ignore handling                         | browse a real local repo                                          |
+| **M2**    | import/relationship parser and graph model — owner-approved                         | explainable nodes & edges; tests and real-repo trial below        |
+| **M3**    | interactive 3D file graph, camera and labels — temporarily owner-approved           | browse real dependencies in spatial depth                         |
+| **M4**    | alternate 2D graph and synchronized navigation — implemented, awaiting owner review | both modes operate on same graph                                  |
+| **M5**    | non-LLM code intelligence                                                           | dependency metrics, impact and cycles                             |
+| **M6**    | file inspector and source references                                                | accurate source/detail navigation                                 |
+| **M7**    | optional LLM adapter/retrieval                                                      | explicit opt-in, grounded explanations                            |
+| **M8**    | performance, security hardening, DX                                                 | realistic repo scale and robust failures                          |
+| **M9**    | tests, docs, distribution/release                                                   | runnable tested v1.0                                              |
 
 ## Decision log (append; never silently rewrite)
 
@@ -258,3 +258,17 @@ Status: Implemented for independent verification; M3 visual review remains open.
 Graph schema version 1 is additively extended with `category`, `contentKind`, `sizeBytes`, exact resolved incoming/outgoing counts, optional `sha256` for metadata-only nodes, and `partial`/`unsupported`/`skipped` statuses; analyzerVersion advances to `m3-universal-1`. Old graph consumers may ignore extra fields, but a new analysis replaces the server's in-memory graph. TypeScript AST imports/re-exports retain their M2 extraction and evidence rule, with source targets still restricted to supported JS/TS files. Format-specific adapters resolve only exact, unique local files: Python relative `from` modules, Java exact class imports in conventional source roots, quoted C/C++ includes, Rust `mod` declarations, HTML local script/style/image links and CSS imports/asset URLs. These non-AST adapters are deliberately reported `partial`: they do not claim complete syntax coverage. Bare/external, unresolved and ambiguous references never create a resolved edge. Go, JVM variants beyond the exact Java subset, other languages, arbitrary config references, media and unknown formats remain metadata-visible with unsupported dependency analysis. No parser executes repository code or serves source bytes. A category-color facade marker differentiates real file types without adding selectable graph identities. Search, tree, inspector and detail show metadata and coverage status for disconnected files; M4–M7 remain deferred.
 
 CI correction: the initial Image 05 push failed only in `App.test.tsx` while the lazy graph module was still displaying its Suspense fallback on the slower Node 22 runner. The precise heading assertion and real navigation remain; its targeted async wait accommodates a cold transform without disabling tests or changing production routing. All local CI-equivalent checks pass on Node 22 after the correction. Remote CI for this uncommitted change is not claimed.
+
+## M4 alternate 2D map — implementation handoff (2026-10-27)
+
+The owner temporarily approved M3 and authorized M4 on October 27, 2026. This transition does not retroactively change the historical M3 review records above. M4 extends the same GraphPage graph snapshot and canonical file ID: `projectGraph` filters only resolved, directed, evidence-bearing relationships, while `graphLayout2D.ts` recursively places every file under its actual directory ancestry. Empty intermediate directories are visual containers, not dependency endpoints. Two deterministic columns of top-level directories contain vertically stacked nested regions and stable filename grids (up to three columns per directory). Fit bounds include all directories and isolated files; empty and single-file snapshots have finite geometry. The SVG renderer `GraphScene2D.tsx` draws actual file nodes and directional arrowheads, dimming unrelated paths on selection while emphasizing outgoing gold/incoming blue. Exact declarations remain in the unchanged workbench, inspector and file detail. No server route, scanner or schema change was needed.
+
+`App.tsx` owns the active 3D/2D mode and keeps the GraphPage mounted while switching modes. GraphPage continues to own the one graph fetch/explicit analysis lifecycle, search and selected file; both scene components receive the same projection. The 3D scene remains mounted but visually and interactively hidden after first visit, retaining its orbit; the 2D scene retains independent pan/zoom between switches. Repository ID/revision remounts GraphPage, clearing both viewports and selection. Successful same-revision reanalysis clears selection and refits 2D; failed reanalysis retains the previous snapshot. The existing generation/abort checks and reconnect revalidation prevent late old-repository responses from publishing. Opening 2D first does not create a WebGL canvas; unavailable WebGL offers a direct 2D switch.
+
+SVG file nodes have keyboard-operable targets with full path names and focus styling; tree search, directory focus, inspector and mobile panel tabs remain available. Pointer pan, anchored wheel/pinch zoom, buttons, fit and selected-centered one-hop neighborhood focus use bounded scale and ResizeObserver. The complete 200-file inventory may fit too small to read all scene labels at once; zoom/focus or the always-present searchable tree exposes full paths. Deep directories make wide nested boxes and long filenames are truncated on the map only, with exact paths in accessible names/tree/inspector. SVG's per-file/per-connection DOM scales to the current 200-file/1,000-declaration analysis ceiling, not an unlimited repository. No FPS claim is made. The 2D grouping is a directory-organized map rather than the reference image's illustrative force bubbles; this avoids overlapping labels and artificial connectivity.
+
+Known separate parser issue: a commented-out C/C++ `#include` may match an existing file and yield a false-positive edge. This requires a targeted parser correction and regression test outside M4; the 2D renderer displays exactly the validated backend graph and cannot adjudicate a parser's erroneous evidence. M5–M7 remain unimplemented. Local checks and browser evidence belong to this handoff, not independent owner approval or remote CI.
+
+### ADR-026 — Independent SVG file map sharing the M3 graph workspace
+
+Status: Implemented, awaiting independent owner review. Date: 2026-10-27. Choose a pure deterministic nested-directory SVG layout and native pointer/keyboard interaction over flattening the Three camera, a force-directed library or another graph service. One graph-v1 response and one GraphPage selection/search/inspector serve both modes; App only controls which visualization is active. Keep 3D mounted after first visit for orbit persistence; preserve 2D viewport in component state. Benefits: WebGL-free 2D, testable stable layout, exact file identities and directed evidence, accessible tree fallback. Costs: long directory trees yield a tall fit with small labels and parallel paths can overlap; zoom/focus and the inspector provide legibility. No synthetic edges, external dependencies or API boundary changes.

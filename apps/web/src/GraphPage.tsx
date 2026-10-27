@@ -8,6 +8,7 @@ import {
 } from "./graphApi";
 import { layoutGraph, projectGraph } from "./graphModel";
 import { GraphScene3D, supportsWebGL } from "./GraphScene3D";
+import { GraphScene2D } from "./GraphScene2D";
 import { GraphFileTree } from "./GraphFileTree";
 import { GraphWorkbench, GraphNeighborhood } from "./GraphWorkbench";
 import { FileDetail } from "./FileDetail";
@@ -18,6 +19,8 @@ type Props = {
   repository: Selection | null | undefined;
   initialPath?: string | null;
   connection: Connection;
+  mode?: "3d" | "2d";
+  onModeChange?: (mode: "3d" | "2d") => void;
   onOpenRepository: () => void;
   onStale?: () => void;
 };
@@ -26,10 +29,23 @@ export function GraphPage({
   repository,
   initialPath,
   connection,
+  mode: controlledMode,
+  onModeChange,
   onOpenRepository,
   onStale,
 }: Props) {
   const [graph, setGraph] = useState<Graph | null>(null);
+  const [localMode, setLocalMode] = useState<"3d" | "2d">("3d");
+  const mode = controlledMode ?? localMode;
+  const [visited3D, setVisited3D] = useState(mode === "3d");
+  useEffect(() => {
+    if (mode === "3d") setVisited3D(true);
+  }, [mode]);
+  const switchMode = (next: "3d" | "2d") => {
+    setLocalMode(next);
+    onModeChange?.(next);
+  };
+  const [fit2DToken, setFit2DToken] = useState(0);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [noGraph, setNoGraph] = useState(false);
@@ -40,9 +56,16 @@ export function GraphPage({
   const [webglUnavailable, setWebglUnavailable] = useState(
     () => !supportsWebGL(),
   );
-  const [focusId, setFocusId] = useState<string | null>(null);
-  const [focusModule, setFocusModule] = useState<string | null>(null);
-  const [focusToken, setFocusToken] = useState(0);
+  const [focus3D, setFocus3D] = useState({
+    id: null as string | null,
+    module: null as string | null,
+    token: 0,
+  });
+  const [focus2D, setFocus2D] = useState({
+    id: null as string | null,
+    module: null as string | null,
+    token: 0,
+  });
   const [resetToken, setResetToken] = useState(0);
   const [orbitToken, setOrbitToken] = useState(0);
   const [cameraCommand, setCameraCommand] = useState<"fit" | "reset">("reset");
@@ -117,9 +140,10 @@ export function GraphPage({
       setLoading(false);
       setAnalyzing(false);
       setGraph(null);
+      setFit2DToken(0);
       setSelectedId(null);
-      setFocusId(null);
-      setFocusModule(null);
+      setFocus3D({ id: null, module: null, token: 0 });
+      setFocus2D({ id: null, module: null, token: 0 });
       setDetailOpen(false);
       setSearch("");
       setError("");
@@ -232,9 +256,12 @@ export function GraphPage({
   };
   const focus = (id: string) => {
     select(id);
-    setFocusId(id);
-    setFocusModule(null);
-    setFocusToken((value) => value + 1);
+    const setter = mode === "2d" ? setFocus2D : setFocus3D;
+    setter((old) => ({ id, module: null, token: old.token + 1 }));
+  };
+  const focusDirectory = (path: string) => {
+    const setter = mode === "2d" ? setFocus2D : setFocus3D;
+    setter((old) => ({ id: null, module: path, token: old.token + 1 }));
   };
   async function analyze() {
     if (!repository || connection !== "connected" || analyzing) return;
@@ -251,9 +278,10 @@ export function GraphPage({
       if (analysisGeneration.current !== current || next.signal.aborted) return;
       setGraph(result);
       setNoGraph(false);
+      setFit2DToken((value) => value + 1);
       setSelectedId(null);
-      setFocusId(null);
-      setFocusModule(null);
+      setFocus3D({ id: null, module: null, token: 0 });
+      setFocus2D({ id: null, module: null, token: 0 });
       setCameraCommand("reset");
       setResetToken((value) => value + 1);
     } catch (issue) {
@@ -270,10 +298,13 @@ export function GraphPage({
     }
   }
   const camera = (command: "fit" | "reset") => {
-    setFocusId(null);
-    setFocusModule(null);
+    setFocus3D((old) => ({ ...old, id: null, module: null }));
     setCameraCommand(command);
     setResetToken((value) => value + 1);
+  };
+  const fitView = () => {
+    if (mode === "2d") setFit2DToken((value) => value + 1);
+    else camera("fit");
   };
   return (
     <section
@@ -283,10 +314,15 @@ export function GraphPage({
       <div className="graph-heading">
         <div>
           <p className="kicker">
-            Repository / {repository?.rootName ?? "Not selected"} / 3D graph
+            Repository / {repository?.rootName ?? "Not selected"} /{" "}
+            {mode.toUpperCase()} graph
           </p>
           <h1 id="graph-heading">
-            {detailOpen && selected ? selected.name : "3D file atlas"}
+            {detailOpen && selected
+              ? selected.name
+              : mode === "3d"
+                ? "3D file atlas"
+                : "2D file graph"}
           </h1>
         </div>
         <span className="graph-repository-name" title={repository?.rootName}>
@@ -330,18 +366,19 @@ export function GraphPage({
             >
               <button
                 type="button"
-                aria-pressed="true"
-                className="graph-mode-active"
+                aria-pressed={mode === "3d"}
+                className={mode === "3d" ? "graph-mode-active" : ""}
+                onClick={() => switchMode("3d")}
               >
-                3D
+                3D Map
               </button>
               <button
                 type="button"
-                disabled
-                title="Available in M4"
-                aria-label="2D available in M4"
+                aria-pressed={mode === "2d"}
+                className={mode === "2d" ? "graph-mode-active" : ""}
+                onClick={() => switchMode("2d")}
               >
-                2D <small>M4</small>
+                2D Graph
               </button>
             </div>
             <div className="atlas-top-actions">
@@ -429,9 +466,7 @@ export function GraphPage({
               onSelect={select}
               onFocusModule={(path) => {
                 setDetailOpen(false);
-                setFocusId(null);
-                setFocusModule(path);
-                setFocusToken((value) => value + 1);
+                focusDirectory(path);
               }}
               onClose={() => setDetailOpen(false)}
             />
@@ -456,11 +491,7 @@ export function GraphPage({
                     search={search}
                     selectedId={selectedId}
                     onSelect={focus}
-                    onFocusModule={(path) => {
-                      setFocusId(null);
-                      setFocusModule(path);
-                      setFocusToken((value) => value + 1);
-                    }}
+                    onFocusModule={focusDirectory}
                   />
                 )}
                 {visibleGraph && filtered.length === 0 && (
@@ -469,9 +500,16 @@ export function GraphPage({
                   </p>
                 )}
               </section>
-              <div className="graph-stage" aria-label="3D file graph">
+              <div
+                className={`graph-stage ${mode === "2d" ? "graph-stage-2d" : ""}`}
+                aria-label={mode === "2d" ? "2D file graph" : "3D file graph"}
+              >
                 <div className="atlas-stage-caption" aria-hidden="true">
-                  <span>Spatial source atlas</span>
+                  <span>
+                    {mode === "2d"
+                      ? "File connectivity map"
+                      : "Spatial source atlas"}
+                  </span>
                   <strong>{repository.rootName}</strong>
                 </div>
                 {model && layout && model.groups.length > 0 && (
@@ -502,18 +540,69 @@ export function GraphPage({
                       ))}
                   </div>
                 )}
+                {model && (
+                  <div
+                    inert={mode !== "2d"}
+                    className={`graph-2d-layer ${mode === "2d" ? "active" : ""}`}
+                  >
+                    <GraphScene2D
+                      model={model}
+                      selectedId={selectedId}
+                      onSelect={select}
+                      focusId={focus2D.id}
+                      focusModule={focus2D.module}
+                      focusToken={focus2D.token}
+                      fitToken={fit2DToken}
+                      active={mode === "2d"}
+                    />
+                  </div>
+                )}
+                {visited3D &&
+                  visibleGraph &&
+                  model &&
+                  layout &&
+                  visibleGraph.files.length > 0 &&
+                  !webglUnavailable && (
+                    <div
+                      inert={mode !== "3d"}
+                      className={`graph-3d-layer ${mode === "3d" ? "active" : ""}`}
+                    >
+                      <GraphScene3D
+                        model={model}
+                        layout={layout}
+                        selectedId={selectedId}
+                        onSelect={select}
+                        showAllLabels={showAllLabels}
+                        focusId={focus3D.id}
+                        focusModule={focus3D.module}
+                        focusToken={focus3D.token}
+                        resetToken={resetToken}
+                        orbitToken={orbitToken}
+                        cameraCommand={cameraCommand}
+                        onHover={setHoverPath}
+                        onUnavailable={() => setWebglUnavailable(true)}
+                      />
+                    </div>
+                  )}
                 {visibleGraph &&
                 model &&
                 layout &&
                 visibleGraph.files.length > 0 ? (
-                  webglUnavailable ? (
+                  mode === "2d" ? null : webglUnavailable ? (
                     <div className="graph-fallback" role="status">
                       <h2>3D rendering unavailable.</h2>
                       <p>
-                        WebGL is unavailable or its context was lost. Use the
-                        file explorer and relationship details to inspect this
-                        graph.
+                        WebGL is unavailable or its context was lost. Use the 2D
+                        Graph, file explorer and relationship details to inspect
+                        this graph.
                       </p>
+                      <button
+                        type="button"
+                        className="graph-inspector-action"
+                        onClick={() => switchMode("2d")}
+                      >
+                        Open 2D Graph
+                      </button>
                       {supportsWebGL() && (
                         <button
                           type="button"
@@ -524,24 +613,8 @@ export function GraphPage({
                         </button>
                       )}
                     </div>
-                  ) : (
-                    <GraphScene3D
-                      model={model}
-                      layout={layout}
-                      selectedId={selectedId}
-                      onSelect={select}
-                      showAllLabels={showAllLabels}
-                      focusId={focusId}
-                      focusModule={focusModule}
-                      focusToken={focusToken}
-                      resetToken={resetToken}
-                      orbitToken={orbitToken}
-                      cameraCommand={cameraCommand}
-                      onHover={setHoverPath}
-                      onUnavailable={() => setWebglUnavailable(true)}
-                    />
-                  )
-                ) : (
+                  ) : null
+                ) : mode === "2d" && model ? null : (
                   <div className="graph-stage-empty">
                     <h2>
                       {loading || analyzing
@@ -568,48 +641,58 @@ export function GraphPage({
                   aria-expanded={controlsOpen}
                   onClick={() => setControlsOpen((value) => !value)}
                 >
-                  Atlas controls
+                  {mode === "2d" ? "Graph controls" : "Atlas controls"}
                 </button>
                 <div
                   className={`atlas-stage-controls ${controlsOpen ? "open" : ""}`}
-                  aria-label="Atlas controls"
+                  aria-label={
+                    mode === "2d" ? "2D graph controls" : "Atlas controls"
+                  }
                 >
                   <button
                     type="button"
-                    disabled={!visibleGraph || webglUnavailable}
-                    onClick={() => camera("fit")}
+                    disabled={
+                      !visibleGraph || (mode === "3d" && webglUnavailable)
+                    }
+                    onClick={fitView}
                   >
                     Fit view
                   </button>
                   <button
                     type="button"
-                    disabled={!selected || webglUnavailable}
+                    disabled={!selected || (mode === "3d" && webglUnavailable)}
                     onClick={() => selected && focus(selected.id)}
                   >
                     Focus selected
                   </button>
-                  <button
-                    type="button"
-                    aria-pressed={showAllLabels}
-                    disabled={!visibleGraph}
-                    onClick={() => setShowAllLabels((value) => !value)}
-                  >
-                    {showAllLabels ? "Key labels" : "All labels"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!visibleGraph || webglUnavailable}
-                    onClick={() => setOrbitToken((value) => value + 1)}
-                  >
-                    Rotate view
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!visibleGraph || webglUnavailable}
-                    onClick={() => camera("reset")}
-                  >
-                    Reset orientation
-                  </button>
+                  {mode === "3d" && (
+                    <button
+                      type="button"
+                      aria-pressed={showAllLabels}
+                      disabled={!visibleGraph}
+                      onClick={() => setShowAllLabels((value) => !value)}
+                    >
+                      {showAllLabels ? "Key labels" : "All labels"}
+                    </button>
+                  )}
+                  {mode === "3d" && (
+                    <button
+                      type="button"
+                      disabled={!visibleGraph || webglUnavailable}
+                      onClick={() => setOrbitToken((value) => value + 1)}
+                    >
+                      Rotate view
+                    </button>
+                  )}
+                  {mode === "3d" && (
+                    <button
+                      type="button"
+                      disabled={!visibleGraph || webglUnavailable}
+                      onClick={() => camera("reset")}
+                    >
+                      Reset orientation
+                    </button>
+                  )}
                 </div>
                 <div
                   className="atlas-selected-card"
@@ -722,7 +805,7 @@ export function GraphPage({
                       type="button"
                       className="graph-inspector-action"
                       onClick={() => focus(selected.id)}
-                      disabled={webglUnavailable}
+                      disabled={mode === "3d" && webglUnavailable}
                     >
                       Focus file
                     </button>
@@ -840,9 +923,9 @@ export function GraphPage({
             </div>
           )}
           <p className="graph-control-hint">
-            Drag to orbit · Right-drag or two fingers to pan · Scroll or pinch
-            to zoom · Select a file to trace dependencies · / search · Esc
-            clears selection.
+            {mode === "2d"
+              ? "Drag empty space to pan · Scroll, pinch or use zoom buttons · Fit view or focus a file/directory · / search · Esc clears selection."
+              : "Drag to orbit · Right-drag or two fingers to pan · Scroll or pinch to zoom · Select a file to trace dependencies · / search · Esc clears selection."}
           </p>
         </>
       )}
