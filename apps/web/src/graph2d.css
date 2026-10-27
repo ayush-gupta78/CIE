@@ -28,30 +28,19 @@
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 .graph-2d svg {
   display: block;
   width: 100%;
   height: 100%;
-  background: #080b0e;
-  border: 1px solid #55452f;
+  background: #07090c;
+  border: 1px solid #473e34;
   touch-action: none;
   cursor: grab;
 }
 .graph-2d svg:active {
   cursor: grabbing;
-}
-.graph-2d-directory rect {
-  fill: #151a20;
-  fill-opacity: 0.83;
-  stroke: currentColor;
-  stroke-opacity: 0.48;
-  stroke-width: 1;
-}
-.graph-2d-directory text {
-  fill: #dac9a9;
-  font: 12px var(--cie-font-code);
-  pointer-events: none;
 }
 .graph-2d-empty {
   fill: #dac9a9;
@@ -59,44 +48,163 @@
 }
 .graph-2d-edge {
   fill: none;
-  stroke-width: 2;
-  stroke-opacity: 0.85;
+  stroke-width: 1.2;
+  stroke-opacity: 0.46;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
+.graph-2d-edge.active {
+  stroke-width: 2.2;
+  stroke-opacity: 0.94;
+}
 .graph-2d-edge.dim {
-  stroke-opacity: 0.13;
+  stroke-opacity: 0.08;
 }
 .graph-2d-file {
   cursor: pointer;
 }
-.graph-2d-file rect {
-  fill: #0c1015;
-  stroke: #6c6257;
+.graph-2d-hit {
+  fill: transparent;
+  pointer-events: all;
+}
+.graph-2d-ring {
+  fill: none;
+  stroke: #a99170;
+  stroke-opacity: 0.55;
   stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.graph-2d-dot {
+  stroke: #ead6b2;
+  stroke-opacity: 0.65;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+.graph-2d-core {
+  fill: #fff7e6;
+  pointer-events: none;
+}
+.graph-2d-both-ring {
+  fill: none;
+  stroke: #87b7ee;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
 }
 .graph-2d-file text {
   fill: #f0e4d0;
   font: 12px var(--cie-font-code);
   pointer-events: none;
 }
-.graph-2d-file.selected rect {
-  fill: #42301e;
+.graph-2d-file.selected .graph-2d-dot {
+  fill: #f7ebd7;
+  stroke: #fff1d8;
+}
+.graph-2d-file.selected .graph-2d-ring,
+.graph-2d-file.outgoing .graph-2d-ring {
   stroke: #f0c98b;
+  stroke-width: 2.5;
+  stroke-opacity: 1;
+}
+.graph-2d-file.incoming .graph-2d-ring {
+  stroke: #87b7ee;
+  stroke-width: 2;
+  stroke-opacity: 1;
+}
+.graph-2d-file.both .graph-2d-ring {
+  stroke: #f0c98b;
+  stroke-opacity: 1;
+}
+.graph-2d-file.unsupported:not(.selected) .graph-2d-dot {
+  fill: #0b1014 !important;
+  stroke: #a7aaa8;
+  stroke-width: 1.7;
+}
+.graph-2d-file.search-match .graph-2d-ring {
+  stroke: #f1d3a1;
+  stroke-opacity: 1;
   stroke-width: 2;
 }
-.graph-2d-file.outgoing rect {
-  stroke: #f0c98b;
+.graph-2d-file.dim {
+  opacity: 0.3;
 }
-.graph-2d-file.incoming rect {
-  stroke: #87b7ee;
-}
-.graph-2d-file:focus-visible {
+.graph-2d-file:focus {
   outline: none;
 }
-.graph-2d-file:focus-visible rect {
+.graph-2d-file:focus-visible .graph-2d-ring {
   stroke: #fff2c7;
   stroke-width: 3;
+  stroke-opacity: 1;
+}
+.graph-2d-clusters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.graph-2d-clusters span {
+  position: absolute;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  padding: 3px 5px;
+  background: #080b0ed9;
+  font: 11px var(--cie-font-code);
+  text-shadow: 0 2px 5px #000;
+}
+.graph-2d-clusters small {
+  color: #b0a38e;
+  font-size: 9px;
+}
+.graph-2d-selected-name,
+.graph-2d-tooltip {
+  position: absolute;
+  z-index: 3;
+  width: 220px;
+  padding: 7px 10px;
+  background: #111216f2;
+  border: 1px solid #aa8956;
+  color: #f4e7d1;
+  pointer-events: none;
+  box-shadow: 0 7px 20px #000b;
+}
+.graph-2d-tooltip {
+  width: 230px;
+  border-color: #71614d;
+}
+.graph-2d-selected-name strong,
+.graph-2d-tooltip strong {
+  display: block;
+  font: 15px var(--cie-font-display);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph-2d-selected-name small,
+.graph-2d-tooltip span,
+.graph-2d-tooltip small {
+  display: block;
+  font: 10px/1.4 var(--cie-font-code);
+  color: #ccb895;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph-2d-tooltip small {
+  margin-top: 5px;
+}
+.graph-2d-search-summary {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 4px 6px;
+  background: #0a0c0eef;
+  color: #e9c78d;
+  font: 10px var(--cie-font-code);
+  pointer-events: none;
 }
 .graph-2d-scale {
   position: absolute;
@@ -131,6 +239,11 @@
 @media (max-width: 1200px) {
   .graph-2d-layer {
     right: 12px;
+  }
+}
+@media (min-width: 701px) and (max-width: 900px) {
+  .graph-2d-scale {
+    bottom: 66px;
   }
 }
 @media (max-width: 700px) {

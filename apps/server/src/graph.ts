@@ -374,6 +374,10 @@ export function buildGraph(
     const source = byPath.get(path)!;
     if (source.status !== "partial") continue;
     for (const ref of extractReferences(path, bytes.toString("utf8"))) {
+      if (ref.diagnostic) {
+        diagnostics.push({ path, code: ref.diagnostic, line: ref.line });
+        continue;
+      }
       if (!ref.candidates.length) continue;
       const matches = [
         ...new Set(
@@ -457,7 +461,7 @@ export function buildGraph(
   }
   return {
     schemaVersion: 1,
-    analyzerVersion: "m3-universal-1",
+    analyzerVersion: "m3-universal-2",
     manifest,
     repositoryId,
     revision,

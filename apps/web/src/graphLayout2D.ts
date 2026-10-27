@@ -1,102 +1,187 @@
-import type { SceneModel } from "./graphModel";
-import { buildFileTree } from "./GraphFileTree";
+import { groupColor, type SceneModel } from "./graphModel";
 
 export type Box = { x: number; y: number; width: number; height: number };
+export type Point2D = { x: number; y: number };
 export type Layout2D = {
-  nodes: Map<string, Box>;
-  directories: Map<string, Box>;
+  nodes: Map<string, Point2D>;
+  groups: {
+    path: string;
+    x: number;
+    y: number;
+    radius: number;
+    color: string;
+    count: number;
+  }[];
   bounds: Box;
 };
 
-const FILE_WIDTH = 248;
-const ROW = 38;
-const PAD = 20;
-const INDENT = 18;
-const GAP = 26;
-const FILE_GAP = 12;
-
 export function layoutGraph2D(model: SceneModel): Layout2D {
-  const nodes = new Map<string, Box>();
-  const directories = new Map<string, Box>();
-  const tree = buildFileTree(model.files);
-  type Directory = typeof tree;
-  // Each directory encloses its own files and its actual children, including empty intermediate paths.
-  function place(dir: Directory, x: number, y: number): Box {
-    let cursor = y + 42;
-    const columns = Math.min(
-      3,
-      Math.max(1, Math.ceil(Math.sqrt(dir.files.length / 2))),
+  const files = model.files;
+  if (!files.length)
+    return {
+      nodes: new Map(),
+      groups: [],
+      bounds: { x: -150, y: -100, width: 300, height: 200 },
+    };
+  const index = new Map(files.map((file, i) => [file.id, i]));
+  const links = [...model.connections]
+    .filter((edge) => index.has(edge.from) && index.has(edge.to))
+    .sort(
+      (a, b) =>
+        a.from.localeCompare(b.from, "en") ||
+        a.to.localeCompare(b.to, "en") ||
+        a.kind.localeCompare(b.kind, "en"),
     );
-    let width = PAD * 2 + columns * FILE_WIDTH + (columns - 1) * FILE_GAP;
-    dir.files.forEach((file, index) => {
-      nodes.set(file.id, {
-        x: x + PAD + (index % columns) * (FILE_WIDTH + FILE_GAP),
-        y: cursor + Math.floor(index / columns) * ROW,
-        width: FILE_WIDTH,
-        height: 30,
-      });
-    });
-    cursor += Math.ceil(dir.files.length / columns) * ROW;
-    for (const child of [...dir.children].sort((a, b) =>
-      a.path.localeCompare(b.path, "en"),
-    )) {
-      const box = place(child, x + INDENT, cursor);
-      width = Math.max(width, box.x + box.width - x + PAD);
-      cursor += box.height + 8;
-    }
-    const box = { x, y, width, height: Math.max(76, cursor - y + 8) };
-    directories.set(dir.path, box);
-    return box;
+  const degrees = new Map<string, number>();
+  for (const link of links) {
+    degrees.set(link.from, (degrees.get(link.from) ?? 0) + link.count);
+    degrees.set(link.to, (degrees.get(link.to) ?? 0) + link.count);
   }
-  const roots = [...tree.children].sort((a, b) =>
-    a.path.localeCompare(b.path, "en"),
-  );
-  const measureWidth = (dir: Directory): number => {
-    const columns = Math.min(
-      3,
-      Math.max(1, Math.ceil(Math.sqrt(dir.files.length / 2))),
-    );
-    return Math.max(
-      PAD * 2 + columns * FILE_WIDTH + (columns - 1) * FILE_GAP,
-      ...dir.children.map((child) => INDENT + PAD + measureWidth(child)),
-    );
-  };
-  const leftWidth = Math.max(
-    288,
-    tree.files.length ? measureWidth({ ...tree, children: [] }) : 0,
-    ...roots.filter((_, index) => index % 2 === 0).map(measureWidth),
-  );
-  let left = PAD;
-  let right = PAD;
-  let bottom = PAD;
-  if (tree.files.length) {
-    const box = place({ ...tree, children: [], files: tree.files }, PAD, PAD);
-    left += box.height + GAP;
-    bottom = Math.max(bottom, box.y + box.height);
-  }
-  roots.forEach((root, index) => {
-    const column = index % 2;
-    const x = PAD + column * (leftWidth + GAP);
-    const y = column ? right : left;
-    const box = place(root, x, y);
-    if (column) right += box.height + GAP;
-    else left += box.height + GAP;
-    bottom = Math.max(bottom, y + box.height);
+  const sortedGroups = [...model.groups].sort((a, b) => {
+    const weight = (group: typeof a) =>
+      group.files.reduce((sum, file) => sum + (degrees.get(file.id) ?? 0), 0);
+    return weight(b) - weight(a) || a.path.localeCompare(b.path, "en");
   });
-  if (!tree.files.length && !roots.length) {
-    directories.set(".", { x: PAD, y: PAD, width: 288, height: 76 });
-    bottom = 96;
+  const anchors = new Map<string, Point2D>();
+  const placed: { x: number; y: number; radius: number }[] = [];
+  for (const group of sortedGroups) {
+    const radius = Math.max(68, Math.sqrt(group.files.length) * 40);
+    let anchor = { x: 0, y: 0 };
+    for (let candidate = 0; candidate < 4000; candidate++) {
+      const angle = candidate * 2.399963229728653;
+      const distance = Math.sqrt(candidate) * 95;
+      anchor = { x: Math.cos(angle) * distance, y: Math.sin(angle) * distance };
+      if (
+        placed.every(
+          (other) =>
+            Math.hypot(anchor.x - other.x, anchor.y - other.y) >=
+            radius + other.radius + 65,
+        )
+      )
+        break;
+    }
+    anchors.set(group.path, anchor);
+    placed.push({ ...anchor, radius });
   }
-  const boxes = [...directories.values()];
+  const positions = files.map((file) => {
+    const group = sortedGroups.find((entry) => entry.path === file.parent)!;
+    const local = group.files.findIndex((entry) => entry.id === file.id);
+    const angle = local * 2.399963229728653;
+    const distance = Math.sqrt(local) * 38;
+    const anchor = anchors.get(file.parent)!;
+    return {
+      x: anchor.x + Math.cos(angle) * distance,
+      y: anchor.y + Math.sin(angle) * distance,
+    };
+  });
+  const separate = () => {
+    let moved = false;
+    for (let i = 0; i < positions.length; i++)
+      for (let j = i + 1; j < positions.length; j++) {
+        let dx = positions[j].x - positions[i].x;
+        let dy = positions[j].y - positions[i].y;
+        let distance = Math.hypot(dx, dy);
+        if (distance >= 54) continue;
+        moved = true;
+        if (distance < 0.001) {
+          dx = 1;
+          dy = 0;
+          distance = 1;
+        }
+        const shift = (54 - distance) / (2 * distance);
+        positions[i].x -= dx * shift;
+        positions[i].y -= dy * shift;
+        positions[j].x += dx * shift;
+        positions[j].y += dy * shift;
+      }
+    return moved;
+  };
+  // ponytail: bounded O(iterations × files²) relaxation; the 200-file server cap keeps it finite.
+  for (let iteration = 0; iteration < 90; iteration++) {
+    const forces = positions.map(() => ({ x: 0, y: 0 }));
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const dx = positions[j].x - positions[i].x;
+        const dy = positions[j].y - positions[i].y;
+        const distance = Math.max(0.001, Math.hypot(dx, dy));
+        if (distance >= 120) continue;
+        const amount = ((120 - distance) * 0.024) / distance;
+        forces[i].x -= dx * amount;
+        forces[i].y -= dy * amount;
+        forces[j].x += dx * amount;
+        forces[j].y += dy * amount;
+      }
+    }
+    for (const link of links) {
+      const a = index.get(link.from)!;
+      const b = index.get(link.to)!;
+      if (a === b) continue;
+      const dx = positions[b].x - positions[a].x;
+      const dy = positions[b].y - positions[a].y;
+      const distance = Math.max(0.001, Math.hypot(dx, dy));
+      const amount =
+        Math.min(18, Math.max(-18, (distance - 104) * 0.045)) / distance;
+      forces[a].x += dx * amount;
+      forces[a].y += dy * amount;
+      forces[b].x -= dx * amount;
+      forces[b].y -= dy * amount;
+    }
+    for (let i = 0; i < files.length; i++) {
+      const anchor = anchors.get(files[i].parent)!;
+      forces[i].x += (anchor.x - positions[i].x) * 0.012;
+      forces[i].y += (anchor.y - positions[i].y) * 0.012;
+      positions[i].x += Math.max(-16, Math.min(16, forces[i].x));
+      positions[i].y += Math.max(-16, Math.min(16, forces[i].y));
+    }
+    separate();
+  }
+  for (let pass = 0; pass < 40; pass++) if (!separate()) break;
+  // Align the network's longest axis with the panoramic stage without changing its links.
+  const meanX =
+    positions.reduce((sum, point) => sum + point.x, 0) / positions.length;
+  const meanY =
+    positions.reduce((sum, point) => sum + point.y, 0) / positions.length;
+  const xx = positions.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+  const yy = positions.reduce((sum, point) => sum + (point.y - meanY) ** 2, 0);
+  const xy = positions.reduce(
+    (sum, point) => sum + (point.x - meanX) * (point.y - meanY),
+    0,
+  );
+  const angle = Math.atan2(2 * xy, xx - yy) / 2;
+  const cosine = Math.cos(angle),
+    sine = Math.sin(angle);
+  for (const point of positions) {
+    const x = point.x - meanX,
+      y = point.y - meanY;
+    point.x = (x * cosine + y * sine) * 1.65;
+    point.y = -x * sine + y * cosine;
+  }
+  const nodes = new Map(files.map((file, i) => [file.id, positions[i]]));
+  const groups = model.groups.map((group) => {
+    const members = group.files.map((file) => nodes.get(file.id)!);
+    const x = members.reduce((sum, point) => sum + point.x, 0) / members.length;
+    const y = members.reduce((sum, point) => sum + point.y, 0) / members.length;
+    return {
+      path: group.path,
+      x,
+      y,
+      radius:
+        Math.max(
+          30,
+          ...members.map((point) => Math.hypot(point.x - x, point.y - y)),
+        ) + 24,
+      color: groupColor(group.path),
+      count: members.length,
+    };
+  });
+  const minX = Math.min(...positions.map((point) => point.x)) - 80;
+  const maxX = Math.max(...positions.map((point) => point.x)) + 80;
+  const minY = Math.min(...positions.map((point) => point.y)) - 80;
+  const maxY = Math.max(...positions.map((point) => point.y)) + 80;
   return {
     nodes,
-    directories,
-    bounds: {
-      x: 0,
-      y: 0,
-      width: Math.max(328, ...boxes.map((box) => box.x + box.width + PAD)),
-      height: Math.max(116, bottom + PAD),
-    },
+    groups,
+    bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
   };
 }
 

@@ -309,7 +309,7 @@ class SceneBoundary extends Component<
   }
 }
 
-function CameraRig({
+export function CameraRig({
   model,
   layout,
   focusId,
@@ -361,17 +361,11 @@ function CameraRig({
   );
   const homeRef = useRef(home);
   homeRef.current = home;
-  const previousHome = useRef(home);
+  const previousAspect = useRef(size.width / size.height);
+  const focusedBounds = useRef<Point[] | null>(null);
   const previousOrbitToken = useRef(orbitToken);
   const aspectRef = useRef(size.width / size.height);
   aspectRef.current = size.width / size.height;
-  const previousScale = useRef(
-    initialCameraScale(
-      aspectRef.current,
-      model.files.length,
-      model.groups.length,
-    ),
-  );
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
     controlsRef.current = controls;
@@ -391,38 +385,59 @@ function CameraRig({
     const controls = controlsRef.current;
     if (controls) {
       controls.maxDistance = Math.max(60, home * 3);
-      // Preserve orbit direction and target while resizing, but fit the new aspect.
-      if (previousHome.current !== home) {
+      const aspect = aspectRef.current;
+      if (previousAspect.current !== aspect) {
         const offset = camera.position.clone().sub(controls.target);
-        const scale = initialCameraScale(
-          aspectRef.current,
-          model.files.length,
-          model.groups.length,
+        const direction = offset.clone().normalize();
+        const points = focusedBounds.current ?? fitPoints;
+        const center: Point = [
+          controls.target.x,
+          controls.target.y,
+          controls.target.z,
+        ];
+        const heading: Point = [direction.x, direction.y, direction.z];
+        const oldFit = homeDistance(
+          points,
+          center,
+          previousAspect.current,
+          heading,
         );
-        if (scale !== previousScale.current) {
-          controls.target.set(
-            layout.center[0] + (scale < 1 ? layout.radius * 0.12 : 0),
-            layout.center[1] + 1.2,
-            layout.center[2],
+        const newFit = homeDistance(points, center, aspect, heading);
+        let distance = offset.length() * (newFit / oldFit);
+        // A material aspect change must keep the selected neighborhood visible.
+        if (
+          focusedBounds.current &&
+          Math.max(
+            aspect / previousAspect.current,
+            previousAspect.current / aspect,
+          ) > 1.3
+        )
+          distance = Math.max(
+            distance,
+            newFit * 1.15,
+            model.files.length > 80 ? 23 : 11,
           );
-          camera.position
-            .copy(controls.target)
-            .addScaledVector(offset.normalize(), home * scale);
-        } else {
-          camera.position
-            .copy(controls.target)
-            .addScaledVector(offset, home / previousHome.current);
-        }
-        previousScale.current = scale;
+        camera.position
+          .copy(controls.target)
+          .addScaledVector(direction, distance);
         controls.update();
         invalidate();
       }
     }
-    previousHome.current = home;
-  }, [camera, home, invalidate, layout, model.files.length]);
+    previousAspect.current = aspectRef.current;
+  }, [
+    camera,
+    home,
+    invalidate,
+    fitPoints,
+    model.files.length,
+    size.width,
+    size.height,
+  ]);
   useEffect(() => {
     const controls = controlsRef.current;
     if (!controls) return;
+    focusedBounds.current = null;
     const direction =
       cameraCommand === "fit"
         ? camera.position.clone().sub(controls.target).normalize()
@@ -478,7 +493,10 @@ function CameraRig({
     invalidate();
   }, [camera, invalidate, orbitToken]);
   useEffect(() => {
-    if (!focusId && !focusModule) return;
+    if (!focusId && !focusModule) {
+      focusedBounds.current = null;
+      return;
+    }
     const ids = focusId
       ? [
           focusId,
@@ -519,6 +537,7 @@ function CameraRig({
     ) as Point;
     const controls = controlsRef.current;
     if (!controls) return;
+    focusedBounds.current = bounds;
     const direction = camera.position.clone().sub(controls.target).normalize();
     const distance = Math.max(
       model.files.length > 80 ? 23 : 11,

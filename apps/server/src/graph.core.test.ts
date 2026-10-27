@@ -124,6 +124,98 @@ it("does not treat commented or docstring-only references as relationships", () 
   expect(graph.edges).toEqual([]);
 });
 
+it("extracts only active C/C++ includes with original line evidence", () => {
+  const graph = buildGraph(
+    [
+      source(
+        "native/main.cpp",
+        [
+          '// #include "ghost.h"',
+          '/*\n#include "ghost.h"\n*/',
+          'const char* text = "\\\n#include \\"ghost.h\\"";',
+          "#if 0",
+          '#include "ghost.h"',
+          "#else",
+          '# include "real.h"',
+          "#endif",
+        ].join("\n"),
+      ),
+      source("native/ghost.h", ""),
+      source("native/real.h", ""),
+    ],
+    "repo",
+    1,
+    0,
+  );
+  expect(
+    graph.edges.map(({ specifier, evidence }) => [
+      specifier,
+      evidence.line,
+      evidence.column,
+    ]),
+  ).toEqual([["real.h", 10, 12]]);
+  expect(graph.counts.resolved).toBe(1);
+});
+
+it("does not resolve preprocessor-ambiguous includes and reports partial coverage", () => {
+  const inputs = [
+    source(
+      "native/main.c",
+      [
+        "#ifdef PLATFORM",
+        '#include "target.h"',
+        "#else",
+        '#include "target.h"',
+        "#endif",
+        '#include "target.h"',
+      ].join("\n"),
+    ),
+    source("native/target.h", ""),
+  ];
+  const graph = buildGraph(inputs, "repo", 1, 0);
+  expect(graph.edges.map((edge) => edge.evidence.line)).toEqual([6]);
+  expect(graph.diagnostics).toContainEqual({
+    path: "native/main.c",
+    code: "UNSUPPORTED_PREPROCESSOR_CONDITION",
+    line: 1,
+  });
+  expect(graph.partial).toBe(true);
+  expect(
+    graph.files.find((file) => file.path === "native/main.c")?.status,
+  ).toBe("partial");
+  expect(buildGraph([...inputs].reverse(), "repo", 1, 0)).toEqual(graph);
+});
+
+it("does not promote line-spliced comments or raw strings to includes", () => {
+  const graph = buildGraph(
+    [
+      source(
+        "native/main.cpp",
+        [
+          "// disabled \\",
+          '#include "ghost.h"',
+          'auto text = R"tag(',
+          '#include "ghost.h"',
+          ')tag";',
+          "#if 0",
+          '#include "ghost.h"',
+          "#elif 1",
+          '#include "real.h"',
+          "#endif",
+        ].join("\n"),
+      ),
+      source("native/ghost.h", ""),
+      source("native/real.h", ""),
+    ],
+    "repo",
+    1,
+    0,
+  );
+  expect(
+    graph.edges.map(({ specifier, evidence }) => [specifier, evidence.line]),
+  ).toEqual([["real.h", 9]]);
+});
+
 it("keeps valid siblings when pathological nesting defeats the AST parser", () => {
   const graph = buildGraph(
     [
@@ -216,7 +308,7 @@ it("keeps supported imports alongside unsupported import-equals with stable outp
   ];
   const graph = buildGraph(sources, "repo", 1, 0);
   expect(graph.schemaVersion).toBe(1);
-  expect(graph.analyzerVersion).toBe("m3-universal-1");
+  expect(graph.analyzerVersion).toBe("m3-universal-2");
   expect(graph.edges.map((edge) => edge.kind)).toEqual([
     "imports",
     "reexports",

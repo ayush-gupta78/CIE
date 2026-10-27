@@ -222,7 +222,10 @@ export function GraphPage({
         ) {
           setSearch("");
           document.activeElement.blur();
-        } else setSelectedId(null);
+        } else {
+          setSelectedId(null);
+          setFocus2D((old) => ({ ...old, id: null, module: null }));
+        }
       }
       if (
         event.key === "/" &&
@@ -303,8 +306,10 @@ export function GraphPage({
     setResetToken((value) => value + 1);
   };
   const fitView = () => {
-    if (mode === "2d") setFit2DToken((value) => value + 1);
-    else camera("fit");
+    if (mode === "2d") {
+      setFocus2D((old) => ({ ...old, id: null, module: null }));
+      setFit2DToken((value) => value + 1);
+    } else camera("fit");
   };
   return (
     <section
@@ -548,6 +553,7 @@ export function GraphPage({
                     <GraphScene2D
                       model={model}
                       selectedId={selectedId}
+                      search={search}
                       onSelect={select}
                       focusId={focus2D.id}
                       focusModule={focus2D.module}
@@ -812,7 +818,14 @@ export function GraphPage({
                     <button
                       type="button"
                       className="graph-inspector-action"
-                      onClick={() => setSelectedId(null)}
+                      onClick={() => {
+                        setSelectedId(null);
+                        setFocus2D((old) => ({
+                          ...old,
+                          id: null,
+                          module: null,
+                        }));
+                      }}
                     >
                       Clear selection
                     </button>
