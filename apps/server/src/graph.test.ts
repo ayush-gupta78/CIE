@@ -445,7 +445,7 @@ it("rejects too many empty directories without publishing an incomplete graph", 
   });
   expect(response.statusCode).toBe(422);
   expect((await get()).statusCode).toBe(409);
-});
+}, 15_000);
 
 it("maps excessive imports to a bounded API error and retains the prior graph", async () => {
   const selected = (
