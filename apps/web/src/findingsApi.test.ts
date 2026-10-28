@@ -79,6 +79,69 @@ const impact = {
   ],
 };
 afterEach(() => vi.unstubAllGlobals());
+const countedEdges = (g: Graph) => {
+  let scans = 0;
+  const edges = new Proxy(g.edges, {
+    get(target, property, receiver) {
+      if (property === "filter")
+        return (predicate: (edge: Graph["edges"][number]) => boolean) => {
+          scans++;
+          return target.filter(predicate);
+        };
+      if (property === Symbol.iterator)
+        return function* () {
+          scans++;
+          yield* target;
+        };
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  return { graph: { ...g, edges }, scans: () => scans };
+};
+
+it("validates all insights against one verified edge scan", async () => {
+  const observed = countedEdges(graph);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => insights }),
+  );
+  expect((await getInsights(repo, observed.graph)).files).toHaveLength(2);
+  expect(observed.scans()).toBe(1);
+});
+
+it("validates each segment of a multi-hop impact without rebuilding verified edges", async () => {
+  const g = {
+    ...graph,
+    files: [
+      ...graph.files,
+      { ...graph.files[0], id: "c", path: "top/c.ts", parent: "top" },
+    ],
+    edges: [...graph.edges, { ...graph.edges[0], from: "c", to: "b" }],
+  } as Graph;
+  const observed = countedEdges(g);
+  const value = {
+    ...impact,
+    total: 2,
+    indirect: ["c"],
+    affected: [
+      ...impact.affected,
+      {
+        id: "c",
+        path: "top/c.ts",
+        parent: "top",
+        distance: 2,
+        chain: ["a", "b", "c"],
+      },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, json: async () => value }),
+  );
+  expect((await getImpact(repo, observed.graph, "a")).total).toBe(2);
+  expect(observed.scans()).toBe(1);
+});
+
 it("requests identity-bound findings and impact with canonical IDs", async () => {
   const fetch = vi
     .fn()

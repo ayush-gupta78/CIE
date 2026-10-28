@@ -4,7 +4,6 @@ type File = Graph["files"][number];
 const compare = (a: File, b: File) =>
   a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
-// ponytail: bounded by graph v1's 200 files/1000 declarations; precompute only if that ceiling rises.
 function connections(graph: Graph) {
   const files = [...graph.files].sort(compare);
   const byId = new Map(files.map((file) => [file.id, file]));
@@ -151,26 +150,30 @@ export function insights(graph: Graph) {
         .map((to) => ({ from, to })),
     );
     const start = members[0];
-    const trail = [start];
-    const active = new Set([start]);
-    const find = (current: string): boolean => {
+    const previous = new Map<string, string>();
+    const queue = [start];
+    let close: string | null = null;
+    for (let at = 0; at < queue.length && close === null; at++) {
+      const current = queue[at];
       for (const next of ordered(outgoing.get(current)!).filter((target) =>
         within.has(target),
       )) {
         if (next === start) {
-          trail.push(start);
-          return true;
+          close = current;
+          break;
         }
-        if (active.has(next)) continue;
-        active.add(next);
-        trail.push(next);
-        if (find(next)) return true;
-        trail.pop();
-        active.delete(next);
+        if (next !== start && !previous.has(next)) {
+          previous.set(next, current);
+          queue.push(next);
+        }
       }
-      return false;
-    };
-    find(start);
+    }
+    if (close === null)
+      throw new Error("Cyclic component has no closed witness.");
+    const trail = [close];
+    while (trail.at(-1) !== start) trail.push(previous.get(trail.at(-1)!)!);
+    trail.reverse();
+    trail.push(start);
     return { id, files: members, relationships, witness: trail };
   });
   const statuses = {

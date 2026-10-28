@@ -198,6 +198,41 @@ it("handles the published 200-file and 1000-declaration ceiling", () => {
   expect(impact(g, named(g, paths[199])).total).toBe(199);
 });
 
+it("finds a closed cycle promptly through a branching SCC with misleading early paths", () => {
+  const branches = Array.from(
+    { length: 30 },
+    (_, i) => `b${String(i).padStart(2, "0")}.ts`,
+  );
+  const links: [string, string][] = [
+    ["a.ts", branches[0]],
+    [branches[0], "zz.ts"],
+    ["zz.ts", "a.ts"],
+  ];
+  for (let i = 0; i < branches.length; i++) {
+    if (i + 1 < branches.length) links.push([branches[i], branches[i + 1]]);
+    if (i + 2 < branches.length) links.push([branches[i], branches[i + 2]]);
+    links.push([branches[i], "z.ts"]);
+  }
+  links.push(["z.ts", branches[0]]);
+  const g = graph(["a.ts", ...branches, "z.ts", "zz.ts"], links);
+  const start = performance.now();
+  const result = insights(g);
+  const elapsed = performance.now() - start;
+  expect(result.cycles).toHaveLength(1);
+  expect(result.cycles[0].files).toHaveLength(g.files.length);
+  const witness = result.cycles[0].witness;
+  expect(witness[0]).toBe(witness.at(-1));
+  for (let i = 1; i < witness.length; i++)
+    expect(result.cycles[0].relationships).toContainEqual({
+      from: witness[i - 1],
+      to: witness[i],
+    });
+  expect(elapsed).toBeLessThan(750);
+  expect(
+    insights({ ...g, edges: [...g.edges].reverse() }).cycles[0].witness,
+  ).toEqual(witness);
+});
+
 it("includes unsupported targets in impact and excludes each source from cyclic reach", () => {
   const g = graph(
     ["a.ts", "b.ts", "asset.png", "lonely.bin"],

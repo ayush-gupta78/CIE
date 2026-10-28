@@ -82,12 +82,43 @@ const params = (repo: Selection, graph: Graph) =>
     revision: String(repo.revision),
     manifest: graph.manifest,
   });
-const pairs = (graph: Graph) =>
-  new Set(
-    graph.edges
-      .filter((e) => e.resolution === "resolved_static" && e.to)
-      .map((e) => `${e.from}\0${e.to}`),
+const verified = (graph: Graph) => {
+  const known = new Map(graph.files.map((file) => [file.id, file]));
+  const outgoing = new Map(
+    [...known.keys()].map((id) => [id, new Set<string>()]),
   );
+  const incoming = new Map(
+    [...known.keys()].map((id) => [id, new Set<string>()]),
+  );
+  const relationships = new Set<string>();
+  let declarations = 0;
+  let unresolved = 0;
+  let external = 0;
+  for (const edge of graph.edges) {
+    if (edge.resolution === "unresolved") unresolved++;
+    if (edge.resolution === "external") external++;
+    if (
+      edge.resolution !== "resolved_static" ||
+      !edge.to ||
+      !known.has(edge.from) ||
+      !known.has(edge.to)
+    )
+      continue;
+    declarations++;
+    relationships.add(`${edge.from}\0${edge.to}`);
+    outgoing.get(edge.from)!.add(edge.to);
+    incoming.get(edge.to)!.add(edge.from);
+  }
+  return {
+    known,
+    outgoing,
+    incoming,
+    relationships,
+    declarations,
+    unresolved,
+    external,
+  };
+};
 
 export async function getInsights(
   repo: Selection,
@@ -108,7 +139,15 @@ export async function getInsights(
     invalid();
   const value = response as Insights;
   const t = value.totals;
-  const known = new Map(graph.files.map((f) => [f.id, f]));
+  const {
+    known,
+    outgoing,
+    incoming,
+    relationships,
+    declarations,
+    unresolved,
+    external,
+  } = verified(graph);
   const statuses = [
     "parsed",
     "partial",
@@ -116,7 +155,6 @@ export async function getInsights(
     "skipped",
     "failed",
   ] as const;
-  const relationships = pairs(graph);
   if (
     value.files.length !== graph.files.length ||
     value.files.length > 200 ||
@@ -138,12 +176,9 @@ export async function getInsights(
     ) ||
     t.files !== graph.files.length ||
     t.relationships !== relationships.size ||
-    t.declarations !==
-      graph.edges.filter((e) => e.resolution === "resolved_static").length ||
-    t.unresolved !==
-      graph.edges.filter((e) => e.resolution === "unresolved").length ||
-    t.external !==
-      graph.edges.filter((e) => e.resolution === "external").length ||
+    t.declarations !== declarations ||
+    t.unresolved !== unresolved ||
+    t.external !== external ||
     t.cycleGroups !== value.cycles.length ||
     !value.files.every(
       (f: unknown) =>
@@ -228,26 +263,12 @@ export async function getInsights(
     )
   )
     invalid();
-  const outgoing = (id: string) =>
-    new Set(
-      graph.edges
-        .filter(
-          (e) => e.from === id && e.resolution === "resolved_static" && e.to,
-        )
-        .map((e) => e.to!),
-    );
-  const incoming = (id: string) =>
-    new Set(
-      graph.edges
-        .filter((e) => e.to === id && e.resolution === "resolved_static")
-        .map((e) => e.from),
-    );
-  const reach = (id: string, neighbors: (id: string) => Set<string>) => {
+  const reach = (id: string, adjacency: Map<string, Set<string>>) => {
     const seen = new Set([id]);
     const queue = [id];
     for (const current of queue)
-      for (const next of neighbors(current)) {
-        if (!next || seen.has(next)) continue;
+      for (const next of adjacency.get(current)!) {
+        if (seen.has(next)) continue;
         seen.add(next);
         queue.push(next);
       }
@@ -256,8 +277,8 @@ export async function getInsights(
   if (
     (value.files as InsightFile[]).some(
       (f) =>
-        f.directDependencies !== outgoing(f.id).size ||
-        f.directDependents !== incoming(f.id).size ||
+        f.directDependencies !== outgoing.get(f.id)!.size ||
+        f.directDependents !== incoming.get(f.id)!.size ||
         f.transitiveDependencies !== reach(f.id, outgoing) ||
         f.transitiveDependents !== reach(f.id, incoming),
     ) ||
@@ -292,6 +313,7 @@ export async function getImpact(
   )
     invalid();
   const value = response as Impact;
+  const relationships = verified(graph).relationships;
   if (
     value.fileId !== fileId ||
     !num(value.total) ||
@@ -324,7 +346,7 @@ export async function getImpact(
         a.chain
           .slice(1)
           .every((id: string, i: number) =>
-            pairs(graph).has(`${id}\0${(a.chain as string[])[i]}`),
+            relationships.has(`${id}\0${(a.chain as string[])[i]}`),
           ) &&
         (a.distance === 1
           ? value.direct.includes(a.id)
