@@ -18,6 +18,7 @@ export function FileDetail({
   model,
   file,
   evidenceId,
+  initialLine,
   onReanalyze,
   onEvidence,
   onSelect,
@@ -28,6 +29,7 @@ export function FileDetail({
   model: SceneModel;
   file: FileNode;
   evidenceId: string | null;
+  initialLine?: number | null;
   onReanalyze: () => void;
   onEvidence: (edge: FileEdge) => void;
   onSelect: (id: string) => void;
@@ -88,8 +90,8 @@ export function FileDetail({
   }, [identity]);
   const evidence = outgoing.find((edge) => edge.id === evidenceId);
   useEffect(
-    () => setLine(evidence?.evidence.line ?? null),
-    [identity, evidenceId],
+    () => setLine(evidence?.evidence.line ?? initialLine ?? null),
+    [identity, evidenceId, initialLine],
   );
   useEffect(() => {
     if (!source || !line || !codeArea.current) return;
@@ -374,13 +376,6 @@ export function FileDetail({
           </ul>
           {!incoming.length && <p>No verified incoming links.</p>}
         </section>
-        <div className="archive-planned">
-          <Crest />
-          <p>
-            AI notes are planned for M7. Source and graph evidence are shown
-            separately.
-          </p>
-        </div>
       </aside>
     </section>
   );

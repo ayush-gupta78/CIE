@@ -1,13 +1,13 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. M0–M4 history and current M5 implementation are described below.
+> Living decision record. M0–M6 history and the M7 implementation are described below.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0–M2 owner-approved; M3 temporarily owner-approved on 2026-10-27; M4 independently owner-approved on 2026-10-27; M5 authorized for implementation and independent review.
+- **Stage:** M0–M6 owner-approved per the M7 owner handoff; M7 implementation awaits independent review and owner approval.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
-- **Current date for decision log:** 2026-10-27
+- **Current date for decision log:** 2026-10-28
 
 ## Why this exists
 
@@ -116,7 +116,7 @@ The following bullets record the prior visual contract. **ADR-022 (2026-10-26) s
 | **M2**    | import/relationship parser and graph model — owner-approved                      | explainable nodes & edges; tests and real-repo trial below        |
 | **M3**    | interactive 3D file graph, camera and labels — temporarily owner-approved        | browse real dependencies in spatial depth                         |
 | **M4**    | alternate 2D graph and synchronized navigation — owner-approved on 2026-10-27    | both modes operate on same graph                                  |
-| **M5**    | non-LLM code intelligence — current implementation milestone                     | dependency metrics, impact and cycles                             |
+| **M5**    | non-LLM code intelligence                                                        | dependency metrics, impact and cycles                             |
 | **M6**    | file inspector and source references                                             | accurate source/detail navigation                                 |
 | **M7**    | optional LLM adapter/retrieval                                                   | explicit opt-in, grounded explanations                            |
 | **M8**    | performance, security hardening, DX                                              | realistic repo scale and robust failures                          |
@@ -180,7 +180,7 @@ M1 verification: frozen-lockfile install, `pnpm typecheck`, `pnpm lint`, `pnpm t
 - Native directory chooser integration and a stricter capability sandbox, if later required by distribution threat model.
 - M2 initial language/schema choice is recorded in ADR-019 below; additional languages remain deferred.
 - M3 renderer and layout are recorded in ADR-020; large-repository tuning remains open.
-- M7 choice of external vs local LLM providers and opt-in details.
+- Additional local model providers beyond the M7 OpenAI adapter; none are claimed supported yet.
 
 ## Document maintenance protocol
 
@@ -308,3 +308,15 @@ M6 extends the existing parchment `FileDetail` rather than the graph payload or 
 ### ADR-030 — Snapshot-bound, bounded source reads and declaration navigation
 
 Status: Implemented for independent M6 owner review. Date: 2026-10-28. Choose a narrowly scoped read-only source route on the existing loopback Fastify service rather than a wildcard file browser, repository snapshot store or editor. Reuse the M1 selected-root/ignore/canonical path boundary and M5 repository/revision/manifest validation, resolving a graph file ID server-side; no browser-supplied disk path or execution is accepted. Read at most 256 KiB/5,000 lines of UTF-8 with fatal decoding, reject binary/oversized/unavailable source with structured path-safe errors, and strip a UTF-8 BOM for display. Captured SHA-256, when available, is compared to live bytes before evidence can be highlighted. Metadata-only text can be displayed as live source but cannot prove analysis-time freshness; no declaration is promoted to verified against such bytes. Source is invalidated with repository, revision or manifest change and requests are canceled/ignored on selection changes. Browser syntax highlighting is read-only and demand-driven, while native selection/clipboard controls avoid an editor framework. The existing Host/Origin gate remains active. Lexical/canonical checks, `O_NOFOLLOW` and descriptor identity checks reduce symlink/replacement exposure, but concurrent ancestor replacement, ignore-file replacement and other filesystem TOCTOU races by local processes are **not** a perfect sandbox; a stronger OS capability sandbox would be a separate security decision. Tradeoffs: smaller files only, no persisted snapshot bytes, no partial-range API, no new language parser, no M7 AI and no scalability redesign.
+
+## M7 optional grounded assistant — implementation awaiting independent review (2026-10-28)
+
+The M7 owner handoff approves M6 and authorizes an opt-in Q&A layer. Historical sections above retain their original milestone statuses. The selected graph's `repositoryId`, `revision`, `manifest`, SHA-256 path-based file IDs and evidence-bearing directed edges remain the only analysis identity. M7 does not alter graph extraction, source restrictions, 2D/3D layout, Findings or offline operation. Configuration and the provider credential live only in the loopback server process; the browser receives enabled/consent/provider/model/hasKey metadata but never the key after submission. Disable or consent withdrawal clears the key and aborts an active request. Restart loses configuration and conversation. The existing exact Host/Origin and JSON mutation gate applies to all AI routes.
+
+`GET/PUT /api/v1/ai/config` manages the explicit opt-in, `POST /api/v1/ai/test` tests connectivity without repository data and `POST /api/v1/ai/ask` binds a question/optional selected graph file ID to one published repository/revision/manifest. The OpenAI Chat Completions call is the sole external adapter; its request construction and response parsing form a provider seam, but no other provider or arbitrary endpoint is supported. Retrieval ranks deterministic graph paths, selected-file neighbors and bounded lexical matches; it reads candidate source only through M6's file-ID/manifest-bound, ignore- and symlink-protected source route. Only byte-verified source excerpts are eligible for quoted line citations. Evidence is serialized as untrusted JSON data separate from the trusted instructions; the provider has no tools, filesystem capability or code-edit route. Question length is capped at 2,000 characters, retrieval at four files and 30 lines/1,200 characters per file, the model at 450 output tokens, and the request at 12 seconds. A single in-process request slot and one-second interval bound concurrency/rate; cancellation aborts the provider request. Context truncation is reported. There are no retries, background uploads, persistent indices, embeddings or telemetry.
+
+Provider citations are accepted only if their file ID, line and exact quote occur in the supplied evidence for that request. Supplied source is rechecked after provider generation; a changed source fails rather than returning a stale citation. `insufficient` returns no fabricated claim/citation when evidence or output validation fails; `cited` attests only to matching quoted source, **not** independent semantic proof of every sentence. A client citation click checks the graph manifest and M6 live-source freshness before navigating to the existing inspector and line. A repository switch/revision change or successful same-revision reanalysis invalidates the conversation; a same-manifest filesystem change in nonretrieved files cannot be detected without reanalysis. Credential-like strings are screened before external transmission, but heuristic redaction is not a proof that all secrets have been removed. The user remains responsible for authorizing transmission of confidential source. Unsupported formats, binary files, metadata-only live text, unresolved references and runtime behavior are not automatically established by model prose.
+
+### ADR-031 — One optional in-process provider over bounded, snapshot-bound evidence
+
+Status: Implemented for independent M7 owner review; **not owner-approved**. Date: 2026-10-28. Choose an in-memory OpenAI-only adapter with explicit enablement, consent and credential over an always-on hosted service, mandatory embeddings/vector DB or an autonomous agent. Reuse the graph/Findings identity and M6 protected source read rather than create parallel paths or file IDs. Structured output is conservatively checked against the bounded evidence supplied to the model, and model interpretations are visibly qualified. This protects the local-first baseline and keeps costs controlled, but exact semantic claim verification, durable captured-source snapshots, comprehensive secret detection, local-model servers, additional provider adapters, streaming and conversation persistence remain deferred. Existing filesystem TOCTOU exposure and a single in-process credential/request slot are explicit limitations, not claims of a multi-user security boundary. M8/M9 and the post-M9 3D upgrade are untouched.

@@ -40,15 +40,17 @@ it("renders an honest archive landing with a real navigation path and deferred f
     (screen.getByRole("button", { name: "Findings M5" }) as HTMLButtonElement)
       .disabled,
   ).toBe(false);
-  for (const label of [
-    "Assistant M7",
-    "Import analysis snapshot, not available yet",
-  ]) {
-    expect(
-      (screen.getByRole("button", { name: label }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-  }
+  expect(
+    (screen.getByRole("button", { name: "Assistant M7" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Import analysis snapshot, not available yet",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
   expect(
     (
       screen.getByRole("button", {
@@ -119,6 +121,10 @@ it("supports keyboard navigation through live links while skipping deferred dest
     document.activeElement,
   );
   await user.tab();
+  expect(screen.getByRole("button", { name: "Assistant M7" })).toBe(
+    document.activeElement,
+  );
+  await user.tab();
   expect(screen.getByRole("button", { name: "Settings" })).toBe(
     document.activeElement,
   );
@@ -130,7 +136,7 @@ it("supports keyboard navigation through live links while skipping deferred dest
       screen.getByRole("heading", { name: "No repository selected" }),
     ).toBeTruthy(),
   );
-  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
 });
 
 it("rechecks the in-memory repository after a disconnected to checking to connected recovery", async () => {

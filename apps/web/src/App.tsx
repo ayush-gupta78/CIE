@@ -23,6 +23,7 @@ const GraphPage = lazy(() =>
 export function App() {
   const [page, setPage] = useState<Page>("workspace");
   const [graphMode, setGraphMode] = useState<"3d" | "2d">("3d");
+  const [assistantRequested, setAssistantRequested] = useState(false);
   const { connection, version, check } = useLocalHealth();
   const [repository, setRepository] = useState<Selection | null | undefined>(
     undefined,
@@ -135,9 +136,12 @@ export function App() {
           <button
             type="button"
             aria-current={
-              page === "graph" && graphMode === "3d" ? "page" : undefined
+              page === "graph" && graphMode === "3d" && !assistantRequested
+                ? "page"
+                : undefined
             }
             onClick={() => {
+              setAssistantRequested(false);
               setGraphMode("3d");
               if (page !== "graph") {
                 setInitialFilePath(null);
@@ -152,9 +156,12 @@ export function App() {
           <button
             type="button"
             aria-current={
-              page === "graph" && graphMode === "2d" ? "page" : undefined
+              page === "graph" && graphMode === "2d" && !assistantRequested
+                ? "page"
+                : undefined
             }
             onClick={() => {
+              setAssistantRequested(false);
               setGraphMode("2d");
               setPage("graph");
             }}
@@ -168,7 +175,16 @@ export function App() {
           >
             Findings <small>M5</small>
           </button>
-          <button type="button" disabled title="Available in M7">
+          <button
+            type="button"
+            aria-current={
+              page === "graph" && assistantRequested ? "page" : undefined
+            }
+            onClick={() => {
+              setAssistantRequested(true);
+              setPage("graph");
+            }}
+          >
             Assistant <small>M7</small>
           </button>
           <button
@@ -220,11 +236,14 @@ export function App() {
             </button>
             <button
               type="button"
-              className={`nav-item ${page === "graph" && graphMode === "3d" ? "active" : ""}`}
+              className={`nav-item ${page === "graph" && graphMode === "3d" && !assistantRequested ? "active" : ""}`}
               aria-current={
-                page === "graph" && graphMode === "3d" ? "page" : undefined
+                page === "graph" && graphMode === "3d" && !assistantRequested
+                  ? "page"
+                  : undefined
               }
               onClick={() => {
+                setAssistantRequested(false);
                 setGraphMode("3d");
                 if (page !== "graph") {
                   setInitialFilePath(null);
@@ -238,11 +257,14 @@ export function App() {
             </button>
             <button
               type="button"
-              className={`nav-item ${page === "graph" && graphMode === "2d" ? "active" : ""}`}
+              className={`nav-item ${page === "graph" && graphMode === "2d" && !assistantRequested ? "active" : ""}`}
               aria-current={
-                page === "graph" && graphMode === "2d" ? "page" : undefined
+                page === "graph" && graphMode === "2d" && !assistantRequested
+                  ? "page"
+                  : undefined
               }
               onClick={() => {
+                setAssistantRequested(false);
                 setGraphMode("2d");
                 setPage("graph");
               }}
@@ -259,10 +281,14 @@ export function App() {
             </button>
             <button
               type="button"
-              className="nav-item future"
-              disabled
-              title="Available in M7"
-              aria-label="Assistant, available in M7"
+              className={`nav-item ${page === "graph" && assistantRequested ? "active" : ""}`}
+              aria-current={
+                page === "graph" && assistantRequested ? "page" : undefined
+              }
+              onClick={() => {
+                setAssistantRequested(true);
+                setPage("graph");
+              }}
             >
               <span className="nav-future-label">
                 <NavGlyph name="assistant" /> Assistant
@@ -337,6 +363,8 @@ export function App() {
                 onModeChange={setGraphMode}
                 onOpenRepository={() => setPage("repository")}
                 onStale={onStale}
+                assistantRequested={assistantRequested}
+                onOpenSettings={() => setPage("settings")}
               />
             </Suspense>
           ) : page === "findings" ? (
