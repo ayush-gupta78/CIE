@@ -1,0 +1,240 @@
+.page-findings .inspector {
+  display: none;
+}
+.page-findings .graph-main {
+  min-width: 0;
+}
+.findings-page {
+  min-height: calc(100vh - 110px);
+  padding: clamp(18px, 3vw, 44px);
+  background: var(--cie-bg);
+  color: var(--cie-text);
+  font: 14px var(--cie-font-ui);
+  overflow-wrap: anywhere;
+}
+.findings-page h1,
+.findings-page h2,
+.findings-page h3 {
+  font-family: var(--cie-font-display);
+  font-weight: 400;
+}
+.findings-page h1 {
+  font-size: clamp(32px, 5vw, 54px);
+  margin: 4px 0;
+}
+.findings-page h2 {
+  font-size: 24px;
+  margin: 0 0 14px;
+}
+.findings-page h3 {
+  font-size: 19px;
+}
+.findings-page p,
+.findings-page small {
+  color: var(--cie-text-muted);
+}
+.findings-page .kicker {
+  color: var(--cie-accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.findings-page button,
+.findings-page input,
+.findings-page select {
+  font: inherit;
+  color: var(--cie-text);
+  background: var(--cie-panel);
+  border: 1px solid var(--cie-border);
+  border-radius: var(--cie-radius-sm);
+}
+.findings-page button {
+  cursor: pointer;
+  padding: 9px 14px;
+}
+.findings-page button:hover {
+  border-color: var(--cie-accent);
+}
+.findings-page button:focus-visible,
+.findings-page input:focus-visible,
+.findings-page select:focus-visible {
+  outline: var(--cie-focus);
+  outline-offset: 2px;
+}
+.findings-page button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.findings-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--cie-border);
+}
+.findings-head > button {
+  border-color: var(--cie-accent);
+  color: var(--cie-accent-active);
+}
+.findings-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+  gap: 10px;
+  margin: 22px 0;
+}
+.findings-metrics > div,
+.findings-list,
+.findings-detail,
+.findings-cycles,
+.findings-coverage,
+.findings-empty {
+  background: var(--cie-panel);
+  border: 1px solid var(--cie-border);
+  border-radius: var(--cie-radius-md);
+  padding: 18px;
+  min-width: 0;
+}
+.findings-metrics > div {
+  padding: 15px 12px;
+}
+.findings-metrics span {
+  display: block;
+  color: var(--cie-text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.findings-metrics strong {
+  display: block;
+  font: 30px var(--cie-font-display);
+  color: var(--cie-accent-active);
+  margin-top: 8px;
+}
+.findings-columns {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1.6fr);
+  gap: 14px;
+}
+.findings-filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.findings-filters label {
+  display: grid;
+  gap: 5px;
+  color: var(--cie-text-muted);
+  font-size: 12px;
+  min-width: 0;
+  flex: 1;
+}
+.findings-filters input,
+.findings-filters select {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px;
+}
+.findings-list ul,
+.findings-detail ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 520px;
+  overflow: auto;
+}
+.findings-list li button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--cie-border);
+  border-radius: 0;
+  background: transparent;
+}
+.findings-list li button[aria-pressed="true"] {
+  border-left: 3px solid var(--cie-accent-active);
+  background: #3a302360;
+}
+.findings-list li span,
+.findings-detail li small {
+  display: block;
+}
+.findings-list li small,
+.findings-detail li small {
+  margin-top: 5px;
+}
+.findings-detail dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.findings-detail dt {
+  color: var(--cie-text-muted);
+}
+.findings-detail dd {
+  margin: 0;
+  color: var(--cie-accent-active);
+}
+.findings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.findings-detail li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--cie-border);
+}
+.findings-cycles,
+.findings-coverage {
+  margin-top: 14px;
+}
+.findings-cycles article {
+  border-top: 1px solid var(--cie-border);
+  padding: 10px 0;
+}
+.findings-coverage dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.findings-coverage dl > div {
+  border: 1px solid var(--cie-border);
+  padding: 10px;
+  min-width: 100px;
+}
+.findings-coverage dt {
+  text-transform: capitalize;
+  color: var(--cie-text-muted);
+}
+.findings-coverage dd {
+  margin: 5px 0 0;
+  color: var(--cie-accent-active);
+}
+.findings-page [role="alert"] {
+  border-left: 3px solid var(--cie-danger);
+  padding: 12px;
+  background: #39212055;
+}
+@media (max-width: 760px) {
+  .findings-columns {
+    grid-template-columns: 1fr;
+  }
+  .findings-page {
+    padding: 16px;
+  }
+  .findings-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 360px) {
+  .findings-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .findings-metrics > div {
+    padding: 10px;
+  }
+  .findings-actions button {
+    width: 100%;
+  }
+}

@@ -11,18 +11,14 @@ import { Workspace } from "./Workspace";
 import { Settings } from "./Settings";
 import { RepositoryPage } from "./RepositoryPage";
 import { Crest, NavGlyph } from "./Crest";
+import { FindingsPage } from "./FindingsPage";
 
 import { currentRepository, type Entry, type Selection } from "./repositoryApi";
 
-type Page = "workspace" | "repository" | "graph" | "settings";
+type Page = "workspace" | "repository" | "graph" | "findings" | "settings";
 const GraphPage = lazy(() =>
   import("./GraphPage").then((module) => ({ default: module.GraphPage })),
 );
-
-const future = [
-  { label: "Analysis", milestone: "M5", icon: "analysis" as const },
-  { label: "Assistant", milestone: "M7", icon: "assistant" as const },
-];
 
 export function App() {
   const [page, setPage] = useState<Page>("workspace");
@@ -33,6 +29,7 @@ export function App() {
   );
   const [selectedFile, setSelectedFile] = useState<Entry | null>(null);
   const [initialFilePath, setInitialFilePath] = useState<string | null>(null);
+  const [initialManifest, setInitialManifest] = useState<string | null>(null);
   const [startupError, setStartupError] = useState("");
   const mustRevalidateSelection = useRef(false);
   const selectionGeneration = useRef(0);
@@ -44,6 +41,7 @@ export function App() {
         setRepository(result);
         setSelectedFile(null);
         setInitialFilePath(null);
+        setInitialManifest(null);
         setStartupError("");
       }
     } catch (error) {
@@ -85,6 +83,7 @@ export function App() {
     setRepository(next);
     setSelectedFile(null);
     setInitialFilePath(null);
+    setInitialManifest(null);
     setStartupError("");
   };
   const onStale = useCallback(() => {
@@ -92,6 +91,7 @@ export function App() {
     setRepository(undefined);
     setSelectedFile(null);
     setInitialFilePath(null);
+    setInitialManifest(null);
   }, []);
 
   const statusText =
@@ -136,6 +136,7 @@ export function App() {
             onClick={() => {
               setGraphMode("3d");
               setInitialFilePath(null);
+              setInitialManifest(null);
               setPage("graph");
             }}
           >
@@ -153,7 +154,11 @@ export function App() {
           >
             2D Graph
           </button>
-          <button type="button" disabled title="Available in M5">
+          <button
+            type="button"
+            aria-current={page === "findings" ? "page" : undefined}
+            onClick={() => setPage("findings")}
+          >
             Findings <small>M5</small>
           </button>
           <button type="button" disabled title="Available in M7">
@@ -186,8 +191,10 @@ export function App() {
         </div>
       </header>
 
-      <div className={`layout ${page === "graph" ? "graph-layout" : ""}`}>
-        {(page === "graph" || page === "settings") && (
+      <div
+        className={`layout ${page === "graph" || page === "findings" ? "graph-layout" : ""}`}
+      >
+        {(page === "graph" || page === "findings" || page === "settings") && (
           <nav className="sidebar" aria-label="Primary navigation">
             <div className="nav-heading">Explore the archive</div>
             <button
@@ -213,6 +220,7 @@ export function App() {
               onClick={() => {
                 setGraphMode("3d");
                 setInitialFilePath(null);
+                setInitialManifest(null);
                 setPage("graph");
               }}
             >
@@ -231,21 +239,26 @@ export function App() {
             >
               <NavGlyph name="graph" /> 2D Graph
             </button>
-            {future.map(({ label, milestone, icon }) => (
-              <button
-                type="button"
-                className="nav-item future"
-                key={label}
-                disabled
-                title={`Available in ${milestone}`}
-                aria-label={`${label}, available in ${milestone}`}
-              >
-                <span className="nav-future-label">
-                  <NavGlyph name={icon} /> {label}
-                </span>
-                <span className="milestone">{milestone}</span>
-              </button>
-            ))}
+            <button
+              type="button"
+              className={`nav-item ${page === "findings" ? "active" : ""}`}
+              aria-current={page === "findings" ? "page" : undefined}
+              onClick={() => setPage("findings")}
+            >
+              <NavGlyph name="analysis" /> Analysis
+            </button>
+            <button
+              type="button"
+              className="nav-item future"
+              disabled
+              title="Available in M7"
+              aria-label="Assistant, available in M7"
+            >
+              <span className="nav-future-label">
+                <NavGlyph name="assistant" /> Assistant
+              </span>
+              <span className="milestone">M7</span>
+            </button>
             <div className="nav-bottom">
               <button
                 type="button"
@@ -274,7 +287,7 @@ export function App() {
         )}
 
         <main
-          className={`main ${page === "graph" ? "graph-main" : ""}`}
+          className={`main ${page === "graph" || page === "findings" ? "graph-main" : ""}`}
           id="main-content"
         >
           {page === "workspace" ? (
@@ -284,6 +297,7 @@ export function App() {
               onOpenGraph={() => {
                 setGraphMode("3d");
                 setInitialFilePath(null);
+                setInitialManifest(null);
                 setPage("graph");
               }}
             />
@@ -306,6 +320,7 @@ export function App() {
                 }
                 repository={repository}
                 initialPath={initialFilePath}
+                initialManifest={initialManifest}
                 connection={connection}
                 mode={graphMode}
                 onModeChange={setGraphMode}
@@ -313,6 +328,24 @@ export function App() {
                 onStale={onStale}
               />
             </Suspense>
+          ) : page === "findings" ? (
+            <FindingsPage
+              key={
+                repository
+                  ? `${repository.repositoryId}:${repository.revision}`
+                  : "none"
+              }
+              repository={repository}
+              connection={connection}
+              onOpenRepository={() => setPage("repository")}
+              onStale={onStale}
+              onOpenGraph={(path, manifest, mode) => {
+                setInitialFilePath(path);
+                setInitialManifest(manifest);
+                setGraphMode(mode);
+                setPage("graph");
+              }}
+            />
           ) : (
             <Settings
               version={version}
@@ -323,7 +356,7 @@ export function App() {
           )}
         </main>
 
-        {page !== "graph" && (
+        {page !== "graph" && page !== "findings" && (
           <aside className="inspector" aria-label="File details">
             <div className="inspector-heading">
               <span>File details</span>
@@ -361,14 +394,15 @@ export function App() {
                   )}
                 </dl>
                 <p>
-                  Source preview and dependency insights arrive in later
-                  milestones.
+                  Source preview arrives in M6. Open Findings for dependency
+                  metrics.
                 </p>
                 <button
                   type="button"
                   className="inspector-atlas-link"
                   onClick={() => {
                     setInitialFilePath(selectedFile.path);
+                    setInitialManifest(null);
                     setPage("graph");
                   }}
                 >
@@ -383,7 +417,7 @@ export function App() {
                 <h2>No file selected</h2>
                 <p>
                   Select a real file in Repository to see basic metadata. Source
-                  preview and dependency insights arrive later.
+                  preview arrives in M6; Findings has dependency metrics.
                 </p>
               </div>
             )}
@@ -415,8 +449,10 @@ export function App() {
                 ? "Unknown"
                 : "Not selected"}
           </strong>{" "}
-          · Graph:{" "}
-          {page === "graph" ? "Explorer open" : "Open Graph to analyze"}
+          ·{" "}
+          {page === "findings"
+            ? "Findings open"
+            : `Graph: ${page === "graph" ? "Explorer open" : "Open Graph to analyze"}`}
         </span>
         <span className="status-version">CIE / {version}</span>
       </footer>

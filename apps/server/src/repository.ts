@@ -20,6 +20,7 @@ import {
   type Graph,
   type Source,
 } from "./graph.js";
+import { impact, insights } from "./graphIntelligence.js";
 
 type Selection = {
   root: string;
@@ -637,6 +638,67 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         "Analyze the selected repository first.",
       );
     return graph;
+  });
+  const intelligenceGraph = (query: unknown, withFile: boolean) => {
+    if (!query || typeof query !== "object" || Array.isArray(query))
+      throw invalid();
+    const value = query as Record<string, unknown>;
+    const keys = withFile
+      ? ["repositoryId", "revision", "manifest", "fileId"]
+      : ["repositoryId", "revision", "manifest"];
+    if (
+      Object.keys(value).length !== keys.length ||
+      keys.some((key) => !(key in value)) ||
+      typeof value.repositoryId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        value.repositoryId,
+      ) ||
+      typeof value.revision !== "string" ||
+      !/^[1-9]\d{0,14}$/.test(value.revision) ||
+      !Number.isSafeInteger(Number(value.revision)) ||
+      typeof value.manifest !== "string" ||
+      !/^[0-9a-f]{64}$/.test(value.manifest) ||
+      (withFile &&
+        (typeof value.fileId !== "string" ||
+          !/^[0-9a-f]{64}$/.test(value.fileId)))
+    )
+      throw invalid();
+    const selected = requireSelection();
+    if (
+      value.repositoryId !== selected.repositoryId ||
+      Number(value.revision) !== selected.revision
+    )
+      throw new RepoError(
+        409,
+        "STALE_REPOSITORY",
+        "Repository view changed. Refresh it.",
+      );
+    if (!graph)
+      throw new RepoError(
+        409,
+        "NO_GRAPH",
+        "Analyze the selected repository first.",
+      );
+    if (value.manifest !== graph.manifest)
+      throw new RepoError(
+        409,
+        "STALE_REPOSITORY",
+        "Repository graph changed. Refresh it.",
+      );
+    return { snapshot: graph, fileId: value.fileId as string };
+  };
+  app.get("/api/v1/repository/insights", async (request) =>
+    insights(intelligenceGraph(request.query, false).snapshot),
+  );
+  app.get("/api/v1/repository/impact", async (request) => {
+    const { snapshot, fileId } = intelligenceGraph(request.query, true);
+    if (!snapshot.files.some((file) => file.id === fileId))
+      throw new RepoError(
+        404,
+        "NOT_FOUND",
+        "File not found in the published graph.",
+      );
+    return impact(snapshot, fileId);
   });
   app.get("/api/v1/repository/tree", async (request) => {
     const selected = requireSelection();

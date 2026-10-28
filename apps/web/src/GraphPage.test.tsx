@@ -287,6 +287,51 @@ it("resolves a repository-explorer path to the same file detail, without inventi
   expect(screen.queryByRole("region", { name: "File detail" })).toBeNull();
 });
 
+it("opens a manifest-bound Findings file directly in the selected 2D workspace", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
+  render(
+    <GraphPage
+      repository={repo}
+      initialPath="shared/entry.ts"
+      initialManifest={graph.manifest}
+      mode="2d"
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  expect(
+    await screen.findByRole("group", { name: /file map with verified/ }),
+  ).toBeTruthy();
+  await waitFor(() =>
+    expect(
+      screen.getByRole("complementary", { name: "Graph file details" })
+        .textContent,
+    ).toContain("shared/entry.ts"),
+  );
+  expect(screen.queryByRole("region", { name: "File detail" })).toBeNull();
+});
+
+it("refuses a Findings file from a different same-revision manifest", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(reply(graph)));
+  render(
+    <GraphPage
+      repository={repo}
+      initialPath="shared/entry.ts"
+      initialManifest="old-manifest"
+      mode="2d"
+      connection="connected"
+      onOpenRepository={() => {}}
+    />,
+  );
+  expect(
+    await screen.findByText(/graph has changed since Findings was opened/),
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("complementary", { name: "Graph file details" })
+      .textContent,
+  ).not.toContain("shared/entry.ts");
+});
+
 it("ignores an old graph response after a repository revision change", async () => {
   let resolveOld!: (value: ReturnType<typeof reply>) => void;
   const pending = new Promise<ReturnType<typeof reply>>((resolve) => {

@@ -1660,8 +1660,7 @@ body {
   .top-navigation button {
     padding: 0 3px;
   }
-  .top-navigation button:nth-child(4),
-  .top-navigation button:nth-child(5) {
+  .top-navigation button:nth-child(6) {
     display: none;
   }
   .layout.graph-layout {
@@ -1770,6 +1769,9 @@ body {
   .top-navigation button {
     min-height: 36px;
     font-size: 10px;
+  }
+  .top-navigation button:nth-child(7) {
+    display: none;
   }
   .top-actions {
     margin-left: auto;

@@ -36,8 +36,11 @@ it("renders an honest archive landing with a real navigation path and deferred f
     name: "3D atlas",
   }) as HTMLButtonElement;
   expect(graph.disabled).toBe(false);
+  expect(
+    (screen.getByRole("button", { name: "Findings M5" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(false);
   for (const label of [
-    "Findings M5",
     "Assistant M7",
     "Import analysis snapshot, not available yet",
   ]) {
@@ -64,6 +67,16 @@ it("renders an honest archive landing with a real navigation path and deferred f
       { name: "No repository selected." },
       { timeout: 5000 },
     ),
+  ).toBeTruthy();
+});
+
+it("opens Findings from the header without a selected repository", async () => {
+  render(<App />);
+  await userEvent.click(screen.getByRole("button", { name: "Findings M5" }));
+  expect(await screen.findByRole("heading", { name: "Findings" })).toBeTruthy();
+  expect(screen.getByText(/Findings open/)).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { name: "No repository selected" }),
   ).toBeTruthy();
 });
 
@@ -99,6 +112,10 @@ it("supports keyboard navigation through live links while skipping deferred dest
   );
   await user.tab();
   expect(screen.getByRole("button", { name: "2D Graph" })).toBe(
+    document.activeElement,
+  );
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Findings M5" })).toBe(
     document.activeElement,
   );
   await user.tab();

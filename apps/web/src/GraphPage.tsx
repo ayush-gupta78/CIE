@@ -18,6 +18,7 @@ import type { Connection } from "./useLocalHealth";
 type Props = {
   repository: Selection | null | undefined;
   initialPath?: string | null;
+  initialManifest?: string | null;
   connection: Connection;
   mode?: "3d" | "2d";
   onModeChange?: (mode: "3d" | "2d") => void;
@@ -28,6 +29,7 @@ type Props = {
 export function GraphPage({
   repository,
   initialPath,
+  initialManifest,
   connection,
   mode: controlledMode,
   onModeChange,
@@ -92,16 +94,19 @@ export function GraphPage({
       : null;
   useEffect(() => {
     if (!initialPath || !visibleGraph) return;
-    const file = visibleGraph.files.find((entry) => entry.path === initialPath);
+    const file =
+      initialManifest && visibleGraph.manifest !== initialManifest
+        ? null
+        : visibleGraph.files.find((entry) => entry.path === initialPath);
     if (file) {
       setSelectedId(file.id);
-      setDetailOpen(true);
+      setDetailOpen(!initialManifest);
     } else {
       setSelectedId(null);
       setDetailOpen(false);
       setSearch(initialPath);
     }
-  }, [initialPath, visibleGraph]);
+  }, [initialPath, initialManifest, visibleGraph]);
 
   async function handleIdentityIssue(
     issue: unknown,
@@ -407,12 +412,15 @@ export function GraphPage({
           </div>
           {initialPath &&
             (!visibleGraph ||
+              (initialManifest && visibleGraph.manifest !== initialManifest) ||
               !visibleGraph.files.some(
                 (entry) => entry.path === initialPath,
               )) && (
               <p className="atlas-unavailable-file" role="status">
                 {visibleGraph
-                  ? `${initialPath} is not in the current analyzed graph. Use Repository for its filesystem metadata; source reading is planned for M6.`
+                  ? initialManifest && visibleGraph.manifest !== initialManifest
+                    ? `The graph has changed since Findings was opened. Return to Findings for current evidence before opening ${initialPath}.`
+                    : `${initialPath} is not in the current analyzed graph. Use Repository for its filesystem metadata; source reading is planned for M6.`
                   : `To inspect ${initialPath}, analyze this repository first. Dependency evidence is available only for supported formats.`}
               </p>
             )}

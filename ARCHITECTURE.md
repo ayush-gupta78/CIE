@@ -1,13 +1,13 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. M0–M3 history and current M4 implementation are described below.
+> Living decision record. M0–M4 history and current M5 implementation are described below.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0–M2 owner-approved; M3 temporarily owner-approved on 2026-10-27; M4 implemented, awaiting independent owner review.
+- **Stage:** M0–M2 owner-approved; M3 temporarily owner-approved on 2026-10-27; M4 independently owner-approved on 2026-10-27; M5 authorized for implementation and independent review.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
-- **Current date for decision log:** 2026-10-26
+- **Current date for decision log:** 2026-10-27
 
 ## Why this exists
 
@@ -109,18 +109,18 @@ The following bullets record the prior visual contract. **ADR-022 (2026-10-26) s
 
 ## Milestones and deliverables
 
-| Milestone | Scope                                                                               | Gate                                                              |
-| --------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs    | install/dev/build/typecheck/lint/tests run; truthful local status |
-| **M1**    | local repository ingestion, directory tree, ignore handling                         | browse a real local repo                                          |
-| **M2**    | import/relationship parser and graph model — owner-approved                         | explainable nodes & edges; tests and real-repo trial below        |
-| **M3**    | interactive 3D file graph, camera and labels — temporarily owner-approved           | browse real dependencies in spatial depth                         |
-| **M4**    | alternate 2D graph and synchronized navigation — implemented, awaiting owner review | both modes operate on same graph                                  |
-| **M5**    | non-LLM code intelligence                                                           | dependency metrics, impact and cycles                             |
-| **M6**    | file inspector and source references                                                | accurate source/detail navigation                                 |
-| **M7**    | optional LLM adapter/retrieval                                                      | explicit opt-in, grounded explanations                            |
-| **M8**    | performance, security hardening, DX                                                 | realistic repo scale and robust failures                          |
-| **M9**    | tests, docs, distribution/release                                                   | runnable tested v1.0                                              |
+| Milestone | Scope                                                                            | Gate                                                              |
+| --------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **M0**    | Monorepo/tooling, local API, design system, polished empty-state app shell, docs | install/dev/build/typecheck/lint/tests run; truthful local status |
+| **M1**    | local repository ingestion, directory tree, ignore handling                      | browse a real local repo                                          |
+| **M2**    | import/relationship parser and graph model — owner-approved                      | explainable nodes & edges; tests and real-repo trial below        |
+| **M3**    | interactive 3D file graph, camera and labels — temporarily owner-approved        | browse real dependencies in spatial depth                         |
+| **M4**    | alternate 2D graph and synchronized navigation — owner-approved on 2026-10-27    | both modes operate on same graph                                  |
+| **M5**    | non-LLM code intelligence — current implementation milestone                     | dependency metrics, impact and cycles                             |
+| **M6**    | file inspector and source references                                             | accurate source/detail navigation                                 |
+| **M7**    | optional LLM adapter/retrieval                                                   | explicit opt-in, grounded explanations                            |
+| **M8**    | performance, security hardening, DX                                              | realistic repo scale and robust failures                          |
+| **M9**    | tests, docs, distribution/release                                                | runnable tested v1.0                                              |
 
 ## Decision log (append; never silently rewrite)
 
@@ -286,3 +286,13 @@ Tradeoffs: dense fitted graphs show circles and limited cluster captions rather 
 ### ADR-027 — Supersede the rectangular M4 layout with a factual circular constellation
 
 Status: Implemented, awaiting independent owner review. Date: 2026-10-27. ADR-026 remains the historical first M4 implementation, but its rectangular file/directory geometry is superseded. Choose a bounded deterministic path-aware relaxation and SVG circles over a continuous force simulation, a new visualization dependency or a flattened 3D camera. Keep one backend graph and one selected file/search state, preserve M3's separate orbit, and use explicit analysis rather than mode-triggered fetches. The correction also fixes gesture lifecycle, selected-neighborhood framing, 3D resize and conservative C/C++ include evidence. Costs are a synchronous bounded layout on graph changes and intentionally sparse labels at overview scale; exact evidence and complete paths remain available in the inspector/tree.
+
+## M5 owner transition and deterministic intelligence (2026-10-27)
+
+The owner independently verified and approved M4, including its circular 2D correction, and authorized M5. Historical M4 handoff/review text above remains unchanged. M5 derives structural findings only from the last published graph-v1 snapshot; a route never rescans the filesystem or analyzes implicitly. The source direction is referencing file → referenced file. Distinct verified ordered file pairs (not declaration count, directory proximity or external/unresolved references) determine reachability and connectivity. Duplicate declarations remain separately available as graph evidence. Direct and transitive dependencies follow outgoing edges; potential change impact follows incoming edges in reverse. Impact chains list the changed file first, then each dependent on a deterministic shortest reverse path, with the actual edge direction explained in the UI. Cycles are deterministic strongly connected components (including verified self-edges) with an explicit closed witness, not undirected proximity.
+
+The read-only `insights` and per-file `impact` routes use the existing loopback Host/Origin gate and the in-memory selected graph, with exact repository ID, revision and manifest parameters. Invalid or stale identities do not return previous findings. A successful same-revision reanalysis replaces the manifest and invalidates previous results; a failed reanalysis leaves the previous graph and its findings intact. The browser first validates graph v1, then binds typed Findings responses and impact requests to that graph's ID/revision/manifest and drops late responses on selection or snapshot changes. Navigation to the existing graph uses a real file identity and does not mount a second viewer or run analysis. Unsupported/partial/failed/skipped statuses remain coverage limitations rather than proof of zero dependencies; static reachability means potential impact, never a measured runtime failure or risk score.
+
+### ADR-028 — Derive bounded structural findings from the published graph
+
+Status: Implemented for independent owner review. Date: 2026-10-27. Choose a pure in-process graph-v1 projection over another parser, background index or database: deduplicate valid resolved file pairs for adjacency, use cycle-safe breadth-first reachability with stable path tie-breaking for impact and transitive counts, and identify directed cycles with strongly connected components. Keep both distinct relationship and declaration totals. Read-only endpoints are snapshot-bound and consume no target source bytes; repeated work remains bounded by the existing 200-file/1,000-declaration analysis ceiling. Keep the analysis action explicit; failed reanalysis does not invalidate published results. The Findings view is separate from 2D/3D rendering but reuses their repository identity and navigates back by canonical file path/ID. Alternatives rejected: inference from filename/folder proximity, unverified imports, runtime execution, a second graph store, cached results without manifest invalidation, security/risk scoring and LLM-generated claims. Tradeoffs: synchronous bounded computation and conservative static coverage; complex paths and large connected graphs remain limited by repository size and UI disclosure, not invented completeness.

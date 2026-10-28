@@ -5,6 +5,7 @@ import "./tokens.css";
 import "./styles.css";
 import "./atlas.css";
 import "./graph2d.css";
+import "./findings.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
