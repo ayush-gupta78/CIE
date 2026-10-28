@@ -33,6 +33,12 @@ const messages: Record<string, string> = {
   DIRECTORY_TOO_LARGE:
     "This directory exceeds the browsing limit of 5,000 entries.",
   IGNORE_TOO_LARGE: "An ignore file exceeds the supported size of 256 KiB.",
+  STALE_SOURCE:
+    "Source changed since analysis. Re-analyze to verify declaration locations.",
+  SOURCE_TOO_LARGE:
+    "Source inspection is limited to 256 KiB and 5,000 lines; file metadata and relationships remain available.",
+  UNSUPPORTED_SOURCE:
+    "Source is binary or not supported UTF-8 text; file metadata and relationships remain available.",
   UNAVAILABLE:
     "Local directory is unavailable. Retry or choose another directory.",
 };

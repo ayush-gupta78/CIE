@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { access, lstat, opendir, open, realpath } from "node:fs/promises";
 import {
@@ -699,6 +699,172 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         "File not found in the published graph.",
       );
     return impact(snapshot, fileId);
+  });
+  app.get("/api/v1/repository/source", async (request) => {
+    const { snapshot, fileId } = intelligenceGraph(request.query, true);
+    const file = snapshot.files.find((item) => item.id === fileId);
+    if (!file)
+      throw new RepoError(
+        404,
+        "NOT_FOUND",
+        "File not found in the published graph.",
+      );
+    const selected = requireSelection();
+    const segments = parts(file.path);
+    if (!segments.length || segments.join("/") !== file.path)
+      throw new RepoError(403, "FORBIDDEN_PATH", "File is not accessible.");
+    await checkRoot(selected);
+    const { current, rules } = await checkedDirectory(
+      selected,
+      segments.slice(0, -1),
+    );
+    if (ignored(segments, false, rules))
+      throw new RepoError(403, "FORBIDDEN_PATH", "File is excluded.");
+    const candidate = resolve(current, segments.at(-1)!);
+    let handle;
+    try {
+      const before = await lstat(candidate);
+      if (
+        !before.isFile() ||
+        before.isSymbolicLink() ||
+        !contained(selected.root, await realpath(candidate))
+      )
+        throw new RepoError(403, "FORBIDDEN_PATH", "File is not accessible.");
+      if (before.size > 256 * 1024)
+        throw new RepoError(
+          422,
+          "SOURCE_TOO_LARGE",
+          "File exceeds the source read limit.",
+        );
+      handle = await open(candidate, constants.O_RDONLY | constants.O_NOFOLLOW);
+      const opened = await handle.stat();
+      if (
+        !opened.isFile() ||
+        opened.dev !== before.dev ||
+        opened.ino !== before.ino
+      )
+        throw new RepoError(
+          403,
+          "FORBIDDEN_PATH",
+          "File changed during source read.",
+        );
+      const buffer = Buffer.alloc(256 * 1024 + 1);
+      let length = 0;
+      while (length < buffer.length) {
+        const { bytesRead } = await handle.read(
+          buffer,
+          length,
+          buffer.length - length,
+          length,
+        );
+        if (!bytesRead) break;
+        length += bytesRead;
+      }
+      const after = await handle.stat();
+      const pathAfter = await lstat(candidate);
+      if (
+        !pathAfter.isFile() ||
+        pathAfter.isSymbolicLink() ||
+        pathAfter.dev !== opened.dev ||
+        pathAfter.ino !== opened.ino ||
+        !contained(selected.root, await realpath(candidate))
+      )
+        throw new RepoError(
+          403,
+          "FORBIDDEN_PATH",
+          "File changed during source read.",
+        );
+      if (length > 256 * 1024 || after.size > 256 * 1024)
+        throw new RepoError(
+          422,
+          "SOURCE_TOO_LARGE",
+          "File exceeds the source read limit.",
+        );
+      if (
+        after.dev !== opened.dev ||
+        after.ino !== opened.ino ||
+        after.size !== opened.size ||
+        after.mtimeMs !== opened.mtimeMs ||
+        pathAfter.size !== after.size ||
+        pathAfter.mtimeMs !== after.mtimeMs ||
+        length !== after.size
+      )
+        throw new RepoError(
+          409,
+          "STALE_SOURCE",
+          "File changed during source read.",
+        );
+      const bytes = buffer.subarray(0, length);
+      if (
+        file.sha256 &&
+        createHash("sha256").update(bytes).digest("hex") !== file.sha256
+      )
+        throw new RepoError(
+          409,
+          "STALE_SOURCE",
+          "Source differs from the published graph.",
+        );
+      if (
+        bytes.some(
+          (byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13,
+        ) ||
+        file.contentKind === "binary"
+      )
+        throw new RepoError(
+          415,
+          "UNSUPPORTED_SOURCE",
+          "File is not UTF-8 text.",
+        );
+      let text: string;
+      try {
+        text = new TextDecoder("utf-8", {
+          fatal: true,
+          ignoreBOM: false,
+        }).decode(bytes);
+      } catch {
+        throw new RepoError(
+          415,
+          "UNSUPPORTED_SOURCE",
+          "File is not UTF-8 text.",
+        );
+      }
+      const lineCount = text
+        ? text.split("\n").length - Number(text.endsWith("\n"))
+        : 0;
+      if (lineCount > 5000)
+        throw new RepoError(
+          422,
+          "SOURCE_TOO_LARGE",
+          "File exceeds the source line limit.",
+        );
+      await checkRoot(selected);
+      const checked = await checkedDirectory(selected, segments.slice(0, -1));
+      if (ignored(segments, false, checked.rules))
+        throw new RepoError(403, "FORBIDDEN_PATH", "File is excluded.");
+      if (selection !== selected || graph !== snapshot)
+        throw new RepoError(
+          409,
+          "STALE_REPOSITORY",
+          "Repository graph changed. Refresh it.",
+        );
+      return {
+        repositoryId: snapshot.repositoryId,
+        revision: snapshot.revision,
+        manifest: snapshot.manifest,
+        fileId: file.id,
+        path: file.path,
+        name: file.name,
+        language: file.language,
+        status: file.status,
+        freshness: file.sha256 ? "verified" : "unverified",
+        text,
+        lineCount,
+      };
+    } catch (error) {
+      throw error instanceof RepoError ? error : fsError(error);
+    } finally {
+      await handle?.close();
+    }
   });
   app.get("/api/v1/repository/tree", async (request) => {
     const selected = requireSelection();

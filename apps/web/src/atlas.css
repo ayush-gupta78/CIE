@@ -1287,7 +1287,7 @@ body {
     min-height: 28px;
   }
 }
-/* Parchment detail is a truthful M3 evidence scaffold, not an M6 source reader. */
+/* Source evidence shares the parchment inspector. */
 .page-graph:has(.archive-detail) .sidebar {
   display: none;
 }
@@ -1308,6 +1308,13 @@ body {
 }
 .graph-page.detail-open .graph-toolbar {
   justify-content: flex-end;
+}
+.graph-panels.graph-panels-suspended {
+  position: absolute;
+  inset-inline: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: -1;
 }
 .archive-detail {
   display: grid;
@@ -1494,6 +1501,87 @@ body {
   border-top: 1px solid #51483f;
   color: #d3b685;
   font: 11px var(--cie-font-ui);
+}
+.archive-source-status,
+.archive-source-evidence {
+  color: #e4c58f;
+  overflow-wrap: anywhere;
+}
+.archive-source-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+.archive-source-actions input {
+  width: 5em;
+  margin-left: 6px;
+}
+.archive-source-actions button,
+.archive-evidence-editor [role="alert"] button {
+  border: 1px solid #b89869;
+  background: #302920;
+  color: #f4e1c2;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.archive-evidence-editor .archive-source-lines {
+  margin: 0;
+  padding: 0;
+  min-width: max-content;
+}
+.archive-evidence-editor .archive-source-lines li {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin: 0;
+  min-height: 22px;
+  white-space: pre;
+}
+.archive-source-lines li.active {
+  background: #7457327a;
+  box-shadow: inset 3px 0 #e3b874;
+}
+.archive-source-lines li > button:first-child {
+  flex: 0 0 4em;
+  border: 0;
+  background: none;
+  color: #b8a98e;
+  text-align: right;
+  cursor: pointer;
+}
+.archive-source-lines li > button:focus-visible {
+  outline: 2px solid #e3b874;
+}
+.archive-source-lines code {
+  font: inherit;
+  tab-size: 2;
+}
+.archive-source-lines .hljs-keyword,
+.archive-source-lines .hljs-selector-tag {
+  color: #e5b87c;
+}
+.archive-source-lines .hljs-string,
+.archive-source-lines .hljs-attr {
+  color: #9cc9ae;
+}
+.archive-source-lines .hljs-comment {
+  color: #aea491;
+}
+.archive-source-lines .hljs-number,
+.archive-source-lines .hljs-literal {
+  color: #bdaddd;
+}
+.archive-source-lines .hljs-title,
+.archive-source-lines .hljs-built_in {
+  color: #a5c5e1;
+}
+.archive-source-edge {
+  border: 1px solid #b89869;
+  background: #322920;
+  color: #e6c48b;
+  cursor: pointer;
 }
 .archive-detail-notes {
   overflow: auto;

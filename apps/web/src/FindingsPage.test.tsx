@@ -450,3 +450,128 @@ it("shows no-repository and offline states without inventing metrics", () => {
   expect(screen.getByText(/No repository selected/)).toBeTruthy();
   expect(screen.queryByText("0 files")).toBeNull();
 });
+
+it("opens each verified impact step and cycle declaration in its referencing file", async () => {
+  const edges = [
+    {
+      id: "edge-1",
+      from: "b",
+      to: "a",
+      kind: "imports",
+      resolution: "resolved_static",
+      evidence: {
+        path: "lib/a.ts",
+        line: 2,
+        column: 1,
+        rule: "unique-relative-file",
+        sha256: "hash",
+      },
+    },
+    {
+      id: "edge-2",
+      from: "b",
+      to: "a",
+      kind: "imports",
+      resolution: "resolved_static",
+      evidence: {
+        path: "lib/a.ts",
+        line: 8,
+        column: 1,
+        rule: "unique-relative-file",
+        sha256: "hash",
+      },
+    },
+    {
+      id: "edge-3",
+      from: "a",
+      to: "b",
+      kind: "imports",
+      resolution: "resolved_static",
+      evidence: {
+        path: "src/a.ts",
+        line: 3,
+        column: 1,
+        rule: "unique-relative-file",
+        sha256: "hash",
+      },
+    },
+  ];
+  vi.mocked(getGraph).mockResolvedValue({ ...graph, edges } as never);
+  vi.mocked(getInsights).mockResolvedValue({
+    ...insights,
+    cycles: [
+      {
+        id: 1,
+        files: ["a", "b"],
+        witness: ["a", "b", "a"],
+        relationships: [
+          { from: "b", to: "a" },
+          { from: "a", to: "b" },
+        ],
+      },
+    ],
+  });
+  vi.mocked(getImpact).mockResolvedValue({
+    repositoryId: "r",
+    revision: 1,
+    manifest: "hash",
+    fileId: "a",
+    total: 1,
+    direct: ["b"],
+    indirect: [],
+    affected: [
+      {
+        id: "b",
+        path: "lib/a.ts",
+        parent: "lib",
+        distance: 1,
+        chain: ["a", "b"],
+      },
+    ],
+  });
+  const onOpenGraph = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <FindingsPage
+      repository={repository}
+      connection="connected"
+      onOpenRepository={vi.fn()}
+      onOpenGraph={onOpenGraph}
+    />,
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Select src/a.ts" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Run impact analysis" }));
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", {
+        name: /View source declaration.*lib\/a\.ts.*2/,
+      }).length,
+    ).toBeGreaterThan(1),
+  );
+  await user.click(
+    screen.getAllByRole("button", {
+      name: /View source declaration.*lib\/a\.ts.*8/,
+    })[1],
+  );
+  expect(onOpenGraph).toHaveBeenLastCalledWith(
+    "lib/a.ts",
+    "hash",
+    "2d",
+    "edge-2",
+  );
+  await user.click(
+    screen
+      .getAllByRole("button", {
+        name: /View source declaration.*src\/a\.ts.*3/,
+      })
+      .at(-1)!,
+  );
+  expect(onOpenGraph).toHaveBeenLastCalledWith(
+    "src/a.ts",
+    "hash",
+    "2d",
+    "edge-3",
+  );
+});

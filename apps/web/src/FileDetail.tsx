@@ -1,17 +1,25 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   analysisDescription,
   categoryLabel,
   type FileNode,
   type Graph,
+  type FileEdge,
 } from "./graphApi";
+import { getSource, type Source } from "./sourceApi";
+import { ApiError } from "./repositoryApi";
 import type { SceneModel } from "./graphModel";
 import { GraphFileTree } from "./GraphFileTree";
 import { Crest } from "./Crest";
+import { highlightLine } from "./sourceHighlight";
 
 export function FileDetail({
   graph,
   model,
   file,
+  evidenceId,
+  onReanalyze,
+  onEvidence,
   onSelect,
   onFocusModule,
   onClose,
@@ -19,6 +27,9 @@ export function FileDetail({
   graph: Graph;
   model: SceneModel;
   file: FileNode;
+  evidenceId: string | null;
+  onReanalyze: () => void;
+  onEvidence: (edge: FileEdge) => void;
   onSelect: (id: string) => void;
   onFocusModule: (path: string) => void;
   onClose: () => void;
@@ -26,6 +37,71 @@ export function FileDetail({
   const outgoing = model.outgoing.get(file.id) ?? [];
   const incoming = model.incoming.get(file.id) ?? [];
   const byId = new Map(graph.files.map((node) => [node.id, node]));
+  const [source, setSource] = useState<Source | null>(null);
+  const [error, setError] = useState<ApiError | Error | null>(null);
+  const [line, setLine] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const sourceList = useRef<HTMLOListElement>(null);
+  const codeArea = useRef<HTMLDivElement>(null);
+  const identity = `${graph.repositoryId}:${graph.revision}:${graph.manifest}:${file.id}`;
+  const lines = useMemo(() => {
+    if (!source?.text) return [];
+    return source.text
+      .split("\n")
+      .slice(0, source.text.endsWith("\n") ? -1 : undefined)
+      .map((text, index) => ({
+        text,
+        html:
+          source.text.length <= 32768
+            ? highlightLine(text, file.path, index + 1)
+            : null,
+      }));
+  }, [source, file.path]);
+  const edgesByLine = useMemo(() => {
+    const grouped = new Map<number, FileEdge[]>();
+    for (const edge of model.outgoing.get(file.id) ?? [])
+      grouped.set(edge.evidence.line, [
+        ...(grouped.get(edge.evidence.line) ?? []),
+        edge,
+      ]);
+    return grouped;
+  }, [model, file.id]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setSource(null);
+    setError(null);
+    setLoading(true);
+    void getSource(graph, file, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setSource(result);
+      })
+      .catch((issue: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            issue instanceof Error ? issue : new Error("Source unavailable."),
+          );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [identity]);
+  const evidence = outgoing.find((edge) => edge.id === evidenceId);
+  useEffect(
+    () => setLine(evidence?.evidence.line ?? null),
+    [identity, evidenceId],
+  );
+  useEffect(() => {
+    if (!source || !line || !codeArea.current) return;
+    const row = sourceList.current?.querySelector<HTMLElement>(
+      `[data-line="${line}"]`,
+    );
+    if (row)
+      codeArea.current.scrollTop =
+        row.offsetTop -
+        codeArea.current.offsetTop -
+        codeArea.current.clientHeight / 2;
+  }, [source, line]);
   return (
     <section className="archive-detail" aria-label="File detail">
       <aside className="archive-detail-tree" aria-label="File detail explorer">
@@ -86,9 +162,10 @@ export function FileDetail({
         </dl>
         <div className="archive-paper-tabs" aria-label="Detail sections">
           <span className="current">Evidence</span>
-          <span>Source · M6</span>
+          <span>Source</span>
         </div>
         <div
+          ref={codeArea}
           className="archive-evidence-editor"
           aria-label="Captured dependency declarations"
         >
@@ -118,9 +195,126 @@ export function FileDetail({
                 : analysisDescription(file)}
             </p>
           )}
-          <div className="archive-source-unavailable">
-            Source preview is planned for M6. No source bytes are loaded here.
-          </div>
+          {loading && <p role="status">Loading source…</p>}
+          {error && (
+            <p role="alert">
+              {error instanceof ApiError && error.code === "STALE_SOURCE"
+                ? "Source changed since analysis; declaration locations cannot be verified."
+                : error.message}{" "}
+              {error instanceof ApiError &&
+                (error.code.startsWith("STALE") ||
+                  error.code === "NO_GRAPH") && (
+                  <button type="button" onClick={onReanalyze}>
+                    Re-analyze repository
+                  </button>
+                )}
+            </p>
+          )}
+          {source &&
+            source.fileId === file.id &&
+            source.manifest === graph.manifest && (
+              <>
+                <p className="archive-source-status" role="status">
+                  {source.freshness === "verified"
+                    ? "Verified source at analyzed snapshot"
+                    : "Source available; dependency evidence not verified"}{" "}
+                  · {source.lineCount} lines
+                </p>
+                {evidence && source.freshness === "verified" && (
+                  <p className="archive-source-evidence">
+                    {evidence.kind} · {evidence.specifier} →{" "}
+                    {byId.get(evidence.to ?? "")?.path} · line{" "}
+                    {evidence.evidence.line}:{evidence.evidence.column}
+                  </p>
+                )}
+                <div className="archive-source-actions">
+                  <label>
+                    Go to line{" "}
+                    <input
+                      type="number"
+                      min="1"
+                      max={source.lineCount}
+                      value={line ?? ""}
+                      onChange={(event) => {
+                        const next = Number(event.target.value);
+                        if (
+                          Number.isSafeInteger(next) &&
+                          next >= 1 &&
+                          next <= source.lineCount
+                        )
+                          setLine(next);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void navigator.clipboard?.writeText(source.text)
+                    }
+                  >
+                    Copy source
+                  </button>
+                </div>
+                <ol
+                  ref={sourceList}
+                  className="archive-source-lines"
+                  aria-label="Source lines"
+                >
+                  {lines.map(({ text, html }, index) => {
+                    const number = index + 1;
+                    const edges =
+                      source.freshness === "verified"
+                        ? (edgesByLine.get(number) ?? [])
+                        : [];
+                    return (
+                      <li
+                        key={number}
+                        data-line={number}
+                        className={
+                          line === number && source.freshness === "verified"
+                            ? "active"
+                            : ""
+                        }
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Line ${number}`}
+                          aria-current={
+                            line === number ? "location" : undefined
+                          }
+                          onClick={() => setLine(number)}
+                        >
+                          {number}
+                        </button>
+                        {html === null ? (
+                          <code>{text || "\u00a0"}</code>
+                        ) : (
+                          <code
+                            dangerouslySetInnerHTML={{
+                              __html: html || "&nbsp;",
+                            }}
+                          />
+                        )}
+                        {edges.map((edge) => (
+                          <button
+                            key={edge.id}
+                            type="button"
+                            className="archive-source-edge"
+                            onClick={() => {
+                              setLine(number);
+                              onEvidence(edge);
+                            }}
+                            aria-label={`View declaration ${edge.id} at line ${number}`}
+                          >
+                            {edge.kind} → {byId.get(edge.to ?? "")?.path}
+                          </button>
+                        ))}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </>
+            )}
         </div>
       </article>
       <aside
@@ -148,6 +342,10 @@ export function FileDetail({
                   {edge.kind} · {edge.evidence.path}:{edge.evidence.line}:
                   {edge.evidence.column}
                 </small>
+                <button type="button" onClick={() => onEvidence(edge)}>
+                  View source declaration · {edge.evidence.path}:
+                  {edge.evidence.line}
+                </button>
               </li>
             ))}
           </ul>
@@ -167,6 +365,10 @@ export function FileDetail({
                   {edge.kind} · {edge.evidence.path}:{edge.evidence.line}:
                   {edge.evidence.column}
                 </small>
+                <button type="button" onClick={() => onEvidence(edge)}>
+                  View source declaration · {edge.evidence.path}:
+                  {edge.evidence.line}
+                </button>
               </li>
             ))}
           </ul>
@@ -175,8 +377,8 @@ export function FileDetail({
         <div className="archive-planned">
           <Crest />
           <p>
-            AI notes and source inspection are planned for M7 and M6. This view
-            contains only verified graph evidence and file metadata.
+            AI notes are planned for M7. Source and graph evidence are shown
+            separately.
           </p>
         </div>
       </aside>

@@ -1,4 +1,9 @@
-import { analysisDescription, type FileNode, type Graph } from "./graphApi";
+import {
+  analysisDescription,
+  type FileEdge,
+  type FileNode,
+  type Graph,
+} from "./graphApi";
 import type { SceneModel } from "./graphModel";
 
 type Props = {
@@ -7,6 +12,7 @@ type Props = {
   selected: FileNode | null;
   onSelect: (id: string) => void;
   onOpenDetail: () => void;
+  onEvidence: (edge: FileEdge) => void;
 };
 
 export function GraphWorkbench({
@@ -14,6 +20,7 @@ export function GraphWorkbench({
   model,
   selected,
   onOpenDetail,
+  onEvidence,
 }: Props) {
   const outgoing = selected ? (model.outgoing.get(selected.id) ?? []) : [];
   const incoming = selected ? (model.incoming.get(selected.id) ?? []) : [];
@@ -63,6 +70,13 @@ export function GraphWorkbench({
                         {graph.files.find((file) => file.id === edge.to)?.path}
                       </small>
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => onEvidence(edge)}
+                      aria-label={`View declaration ${edge.id} at line ${edge.evidence.line}`}
+                    >
+                      View source
+                    </button>
                   </li>
                 ))}
               </ol>
@@ -74,7 +88,7 @@ export function GraphWorkbench({
               </p>
             )}
             <p className="atlas-source-lock">
-              Source preview is planned for M6. These rows are captured static
+              Open file details to read source. These rows are captured static
               relationship evidence, not file contents.
             </p>
           </div>
@@ -86,7 +100,7 @@ export function GraphWorkbench({
             Choose a marker, path in the explorer, or verified connection. The
             workbench will show only captured static evidence.
           </p>
-          <span>Source preview arrives in M6</span>
+          <span>Open a file for source evidence</span>
         </div>
       )}
     </section>

@@ -30,6 +30,7 @@ export function App() {
   const [selectedFile, setSelectedFile] = useState<Entry | null>(null);
   const [initialFilePath, setInitialFilePath] = useState<string | null>(null);
   const [initialManifest, setInitialManifest] = useState<string | null>(null);
+  const [initialEdgeId, setInitialEdgeId] = useState<string | null>(null);
   const [startupError, setStartupError] = useState("");
   const mustRevalidateSelection = useRef(false);
   const selectionGeneration = useRef(0);
@@ -43,6 +44,7 @@ export function App() {
         setInitialFilePath(null);
         setInitialManifest(null);
         setStartupError("");
+        setInitialEdgeId(null);
       }
     } catch (error) {
       if (!signal.aborted && selectionGeneration.current === current)
@@ -85,6 +87,7 @@ export function App() {
     setInitialFilePath(null);
     setInitialManifest(null);
     setStartupError("");
+    setInitialEdgeId(null);
   };
   const onStale = useCallback(() => {
     selectionGeneration.current++;
@@ -92,6 +95,7 @@ export function App() {
     setSelectedFile(null);
     setInitialFilePath(null);
     setInitialManifest(null);
+    setInitialEdgeId(null);
   }, []);
 
   const statusText =
@@ -135,8 +139,11 @@ export function App() {
             }
             onClick={() => {
               setGraphMode("3d");
-              setInitialFilePath(null);
-              setInitialManifest(null);
+              if (page !== "graph") {
+                setInitialFilePath(null);
+                setInitialManifest(null);
+                setInitialEdgeId(null);
+              }
               setPage("graph");
             }}
           >
@@ -219,8 +226,11 @@ export function App() {
               }
               onClick={() => {
                 setGraphMode("3d");
-                setInitialFilePath(null);
-                setInitialManifest(null);
+                if (page !== "graph") {
+                  setInitialFilePath(null);
+                  setInitialManifest(null);
+                  setInitialEdgeId(null);
+                }
                 setPage("graph");
               }}
             >
@@ -321,6 +331,7 @@ export function App() {
                 repository={repository}
                 initialPath={initialFilePath}
                 initialManifest={initialManifest}
+                initialEdgeId={initialEdgeId}
                 connection={connection}
                 mode={graphMode}
                 onModeChange={setGraphMode}
@@ -339,9 +350,10 @@ export function App() {
               connection={connection}
               onOpenRepository={() => setPage("repository")}
               onStale={onStale}
-              onOpenGraph={(path, manifest, mode) => {
+              onOpenGraph={(path, manifest, mode, edgeId) => {
                 setInitialFilePath(path);
                 setInitialManifest(manifest);
+                setInitialEdgeId(edgeId ?? null);
                 setGraphMode(mode);
                 setPage("graph");
               }}
@@ -394,8 +406,8 @@ export function App() {
                   )}
                 </dl>
                 <p>
-                  Source preview arrives in M6. Open Findings for dependency
-                  metrics.
+                  Open this file in the graph workspace to inspect supported
+                  source. Findings has dependency metrics.
                 </p>
                 <button
                   type="button"
@@ -406,7 +418,7 @@ export function App() {
                     setPage("graph");
                   }}
                 >
-                  Open file evidence in graph workspace
+                  Open file source in graph workspace
                 </button>
               </div>
             ) : (
@@ -416,8 +428,8 @@ export function App() {
                 </span>
                 <h2>No file selected</h2>
                 <p>
-                  Select a real file in Repository to see basic metadata. Source
-                  preview arrives in M6; Findings has dependency metrics.
+                  Select a real file in Repository to see basic metadata. Open
+                  it in the graph workspace for supported source and evidence.
                 </p>
               </div>
             )}

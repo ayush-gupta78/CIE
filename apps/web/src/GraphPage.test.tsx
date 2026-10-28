@@ -225,7 +225,7 @@ it("opens real M2 declarations in the detail scaffold and follows a directed dep
   const workbench = screen.getByRole("region", { name: "File workbench" });
   expect(within(workbench).getByText("../shared/entry")).toBeTruthy();
   expect(
-    within(workbench).getByText(/Source preview is planned for M6/),
+    within(workbench).getByText(/Open file details to read source/),
   ).toBeTruthy();
   await user.click(
     within(workbench).getByRole("button", { name: "Open file details" }),

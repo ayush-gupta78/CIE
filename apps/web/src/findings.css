@@ -181,6 +181,18 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.findings-source-actions {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  min-width: 0;
+}
+.findings-source-actions button {
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+  color: var(--cie-accent-active);
+}
 .findings-detail li {
   padding: 12px 0;
   border-bottom: 1px solid var(--cie-border);

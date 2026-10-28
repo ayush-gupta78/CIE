@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { analyzeRepository, getGraph, type Graph } from "./graphApi";
+import {
+  analyzeRepository,
+  getGraph,
+  type FileEdge,
+  type Graph,
+} from "./graphApi";
 import {
   getImpact,
   getInsights,
@@ -13,7 +18,12 @@ type Props = {
   repository: Selection | null | undefined;
   connection: Connection;
   onOpenRepository: () => void;
-  onOpenGraph: (path: string, manifest: string, mode: "2d" | "3d") => void;
+  onOpenGraph: (
+    path: string,
+    manifest: string,
+    mode: "2d" | "3d",
+    edgeId?: string,
+  ) => void;
   onStale?: () => void;
 };
 export function FindingsPage({
@@ -61,6 +71,34 @@ export function FindingsPage({
       ? insights
       : null;
   const selected = published?.files.find((f) => f.id === selectedId) ?? null;
+  const declarations = useMemo(() => {
+    const pairs = new Map<string, FileEdge[]>();
+    for (const edge of graph?.edges ?? []) {
+      if (edge.resolution !== "resolved_static" || !edge.to) continue;
+      const key = `${edge.from}\0${edge.to}`;
+      pairs.set(key, [...(pairs.get(key) ?? []), edge]);
+    }
+    return pairs;
+  }, [graph]);
+  const sourceActions = (from: string, to: string) =>
+    (declarations.get(`${from}\0${to}`) ?? []).map((edge) => {
+      const referencing = graph?.files.find((file) => file.id === edge.from);
+      const target = graph?.files.find((file) => file.id === edge.to);
+      if (!referencing || !target || !graph) return null;
+      return (
+        <button
+          key={edge.id}
+          type="button"
+          aria-label={`View source declaration ${referencing.path}:${edge.evidence.line} → ${target.path}`}
+          onClick={() =>
+            onOpenGraph(referencing.path, graph.manifest, "2d", edge.id)
+          }
+        >
+          View source declaration · {referencing.path}:{edge.evidence.line} →{" "}
+          {target.path}
+        </button>
+      );
+    });
   const shown = useMemo(
     () =>
       [...(published?.files ?? [])]
@@ -509,6 +547,17 @@ export function FindingsPage({
                           </button>
                         ))}
                       </div>
+                      <h3>Direct verified declarations</h3>
+                      <div className="findings-source-actions">
+                        {[...declarations]
+                          .filter(([pair]) =>
+                            pair.split("\0").includes(selected.id),
+                          )
+                          .flatMap(([pair]) => {
+                            const [from, to] = pair.split("\0");
+                            return sourceActions(from, to);
+                          })}
+                      </div>
                       <h3>Impact · affected paths</h3>
                       <p>
                         Potential reachability through known static references;
@@ -554,6 +603,27 @@ export function FindingsPage({
                                     )
                                     .join(" → ")}
                                 </small>
+                                <div
+                                  className="findings-source-actions"
+                                  aria-label={`Verified steps to ${a.path}`}
+                                >
+                                  {a.chain.slice(1).map((id, index) => (
+                                    <div key={`${id}:${index}`}>
+                                      Step {index + 1}:{" "}
+                                      {
+                                        published.files.find((f) => f.id === id)
+                                          ?.path
+                                      }{" "}
+                                      →{" "}
+                                      {
+                                        published.files.find(
+                                          (f) => f.id === a.chain[index],
+                                        )?.path
+                                      }
+                                      {sourceActions(id, a.chain[index])}
+                                    </div>
+                                  ))}
+                                </div>
                               </li>
                             ))}
                           </ol>
@@ -629,6 +699,9 @@ export function FindingsPage({
                           <li key={`${from}:${to}`}>
                             {published.files.find((f) => f.id === from)?.path} →{" "}
                             {published.files.find((f) => f.id === to)?.path}
+                            <div className="findings-source-actions">
+                              {sourceActions(from, to)}
+                            </div>
                           </li>
                         ))}
                       </ul>
