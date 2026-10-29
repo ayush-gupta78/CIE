@@ -115,6 +115,43 @@ it("pins custom HTTPS DNS resolution and sends bearer credentials in a header", 
   expect(lookup).toHaveBeenCalledTimes(1);
 });
 
+it("accepts a public IPv4 address outside the special-use subranges", async () => {
+  vi.mocked(lookup).mockResolvedValue([
+    { address: "192.0.20.1", family: 4 },
+  ] as never);
+  vi.mocked(httpsRequest).mockImplementation(((
+    url: URL,
+    options: RequestOptions,
+    callback: (res: IncomingMessage) => void,
+  ) => {
+    expect(url.hostname).toBe("ai.example");
+    options.lookup!("ai.example", {}, (_error, address) =>
+      expect(address).toBe("192.0.20.1"),
+    );
+    const req = new EventEmitter() as ClientRequest;
+    req.setTimeout = vi.fn();
+    req.destroy = vi.fn();
+    req.end = (() => {
+      const res = new EventEmitter() as IncomingMessage;
+      res.statusCode = 200;
+      callback(res);
+      queueMicrotask(() => {
+        res.emit("data", Buffer.from(response));
+        res.emit("end");
+      });
+      return req;
+    }) as ClientRequest["end"];
+    return req;
+  }) as typeof httpsRequest);
+  await expect(
+    callProvider(
+      validateProviderConfig({ ...custom, endpoint: "https://ai.example/v1" }),
+      messages,
+      new AbortController().signal,
+    ),
+  ).resolves.toEqual({ ok: true });
+});
+
 it("rejects a mixed DNS response containing a private address before connecting", async () => {
   vi.mocked(lookup).mockResolvedValue([
     { address: "8.8.8.8", family: 4 },
@@ -132,6 +169,66 @@ it("rejects a mixed DNS response containing a private address before connecting"
   ).rejects.toThrow("AI provider unavailable");
   expect(httpsRequest).not.toHaveBeenCalled();
 });
+
+it.each(["2001:0db8::1", "2001:2::1", "2002:c000:0201::1", "3fff::1"])(
+  "rejects mixed DNS responses with special-use IPv6 answer %s",
+  async (address) => {
+    vi.mocked(lookup).mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+      { address, family: 6 },
+    ] as never);
+    await expect(
+      callProvider(
+        validateProviderConfig({
+          ...custom,
+          endpoint: "https://ai.example/v1/chat/completions",
+        }),
+        messages,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("AI provider unavailable");
+    expect(httpsRequest).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  "0.2.3.4",
+  "10.0.0.1",
+  "100.64.0.1",
+  "127.0.0.1",
+  "169.254.169.254",
+  "168.63.129.16",
+  "172.16.1.1",
+  "192.0.0.1",
+  "192.0.2.1",
+  "192.31.196.1",
+  "192.52.193.1",
+  "192.88.99.1",
+  "192.168.1.1",
+  "192.175.48.1",
+  "198.18.0.1",
+  "198.51.100.1",
+  "203.0.113.1",
+  "224.0.0.1",
+  "240.0.0.1",
+  "255.255.255.255",
+])(
+  "rejects special-use DNS destination %s before sending credentials",
+  async (address) => {
+    vi.mocked(lookup).mockResolvedValue([{ address, family: 4 }] as never);
+    await expect(
+      callProvider(
+        validateProviderConfig({
+          ...custom,
+          endpoint: "https://ai.example/v1/chat/completions",
+        }),
+        messages,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("AI provider unavailable");
+    expect(httpsRequest).not.toHaveBeenCalled();
+  },
+);
 
 it("sends OpenAI-compatible JSON to local loopback without credentials", async () => {
   let body: Record<string, unknown> = {},

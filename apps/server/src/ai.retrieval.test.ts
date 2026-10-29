@@ -141,3 +141,120 @@ it("retrieves relevant late lines, verified graph relationships and diagnostics 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("sends only screened source while keeping original file and line provenance for citations", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cie-redacted-source-"));
+  const app = createApp(mockedProvider);
+  const secrets = [
+    "synthetic-client-value",
+    "synthetic-access-value",
+    "synthetic-aws-value",
+    "synthetic-github-value",
+    "synthetic-database-value",
+  ];
+  try {
+    await writeFile(
+      join(root, "auth.ts"),
+      [
+        'const clientSecret = "synthetic-client-value";',
+        'const accessToken = "synthetic-access-value";',
+        'const AWS_SECRET_ACCESS_KEY = "synthetic-aws-value";',
+        'const GITHUB_ACCESS_TOKEN = "synthetic-github-value";',
+        'const DATABASE_PASSWORD = "synthetic-database-value";',
+        "const secret = process.env.JWT_SECRET;",
+        "export function authenticate(token: string) { return verifyToken(token); }",
+        "const passwordHash = await hash(password);",
+      ].join("\n"),
+    );
+    const req = (method: string, url: string, payload?: object) =>
+      app.inject({ method, url, headers, payload });
+    const selection = (
+      await req("POST", "/api/v1/repository/select", { path: root })
+    ).json();
+    const graph = (
+      await req("POST", "/api/v1/repository/analyze", {
+        repositoryId: selection.repositoryId,
+        revision: selection.revision,
+      })
+    ).json();
+    const fileId = graph.files[0].id;
+    let sent = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        sent = String(init.body);
+        const content = JSON.stringify({
+          answer: "The file authenticates a token.",
+          citations: [
+            { fileId, line: 7, quote: "authenticate(token: string)" },
+          ],
+        });
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content } }] }),
+          { status: 200 },
+        );
+      }),
+    );
+    await req("PUT", "/api/v1/ai/config", {
+      enabled: true,
+      consent: true,
+      apiKey: "synthetic-test-key",
+    });
+    const body = {
+      repositoryId: graph.repositoryId,
+      revision: graph.revision,
+      manifest: graph.manifest,
+      fileId,
+      question:
+        "Explain clientSecret accessToken AWS_SECRET_ACCESS_KEY GITHUB_ACCESS_TOKEN DATABASE_PASSWORD authenticate",
+    };
+    const response = (await req("POST", "/api/v1/ai/ask", body)).json();
+    expect(response).toMatchObject({
+      status: "cited",
+      citations: [{ fileId, line: 7 }],
+    });
+    const evidence = JSON.parse(JSON.parse(sent).messages[1].content).evidence;
+    expect(evidence[0].fileId).toBe(fileId);
+    expect(evidence[0].lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          line: 1,
+          text: 'const clientSecret = "[redacted]";',
+        }),
+      ]),
+    );
+    expect(evidence[0].lines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          line: 7,
+          text: expect.stringContaining("authenticate(token: string)"),
+        }),
+      ]),
+    );
+    for (const secret of secrets) expect(sent).not.toContain(secret);
+    expect(sent).toContain("process.env.JWT_SECRET");
+    expect(sent).toContain("passwordHash = await hash(password)");
+    expect(response.warnings.join(" ")).toMatch(/sensitive values/);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const content = JSON.stringify({
+          answer: "Invented secret evidence.",
+          citations: [{ fileId, line: 1, quote: "[redacted]" }],
+        });
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content } }] }),
+          { status: 200 },
+        );
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1050));
+    expect((await req("POST", "/api/v1/ai/ask", body)).json()).toMatchObject({
+      status: "insufficient",
+      citations: [],
+    });
+  } finally {
+    await app.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

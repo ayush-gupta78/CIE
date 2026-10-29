@@ -13,6 +13,39 @@ describe("redactEvidence", () => {
     });
   });
 
+  it("masks credential assignments across naming styles and quoted configuration keys", () => {
+    const text = [
+      'const clientSecret = "synthetic-client-value";',
+      'const accessToken = "synthetic-access-value";',
+      'const AWS_SECRET_ACCESS_KEY = "synthetic-aws-value";',
+      'GITHUB_ACCESS_TOKEN: "synthetic-github-value",',
+      'DATABASE_PASSWORD = "synthetic-database-value";',
+      'AUTH_CLIENT_SECRET: "synthetic-auth-value",',
+      '"refreshToken": "synthetic-refresh-value",',
+      '"api-key": "synthetic-api-value",',
+      'const ClientSecret = "synthetic-pascal-value";',
+      "const secret = process.env.JWT_SECRET;",
+      "const passwordHash = await hash(password);",
+      "function validateToken(token: string) { return verifyToken(token); }",
+      'publicName: "ordinary-value",',
+    ].join("\n");
+    const result = redactEvidence(text);
+    expect(result.redactedCount).toBe(9);
+    expect(result.omittedCount).toBe(0);
+    expect(result.text.split("\n")).toHaveLength(text.split("\n").length);
+    expect(result.text).toContain('const clientSecret = "[redacted]";');
+    expect(result.text).toContain(
+      'const AWS_SECRET_ACCESS_KEY = "[redacted]";',
+    );
+    expect(result.text).toContain('"refreshToken": "[redacted]"');
+    expect(result.text).toContain('"api-key": "[redacted]"');
+    expect(result.text).toContain('publicName: "ordinary-value"');
+    expect(result.text).toContain("const secret = process.env.JWT_SECRET;");
+    expect(result.text).toContain("const passwordHash = await hash(password);");
+    expect(result.text).toContain("function validateToken(token: string)");
+    expect(result.text).not.toContain("synthetic-client-value");
+  });
+
   it("masks assigned values without discarding useful source lines", () => {
     const input = `const password = 'hidden password'; // check login\napi_key: "private-key"\nSECRET=opaque\nconst token = "sk-verylongprivate123";`;
     const result = redactEvidence(input);

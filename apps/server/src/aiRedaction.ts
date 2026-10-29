@@ -1,6 +1,13 @@
 const MASK = "[redacted]";
 const OMIT = "[omitted: private key]";
 
+// Match credential-bearing suffixes across camel/Pascal/snake/kebab and prefixed names.
+// A hash/identifier such as passwordHash is not a credential assignment.
+const credentialName = (name: string) =>
+  /(?:secret(?:[_-]?access[_-]?key)?|password|(?:access|refresh)[_-]?token|token|api[_-]?key|private[_-]?key)$/i.test(
+    name,
+  );
+
 /** Redact source excerpts before sending them outside the server. Line positions stay stable. */
 export function redactEvidence(text: string): {
   text: string;
@@ -47,12 +54,14 @@ export function redactEvidence(text: string): {
     );
     // Quoted values may contain whitespace; keep syntax and surrounding evidence.
     line = line.replace(
-      /\b((?:[A-Za-z0-9]+[_-])?(?:secret|password|token|api[_-]?key|private[_-]?key))(\s*[:=]\s*)(["'`])((?:\\.|[^\\\r\n])*?)\3/gi,
-      (_match, name: string, sep: string, quote: string, value: string) =>
-        `${name}${sep}${quote}${mask(value)}${quote}`,
+      /([A-Za-z_][\w-]*|"[^"\r\n]+"|'[^'\r\n]+')(\s*[:=]\s*)(["'`])((?:\\.|[^\\\r\n])*?)\3/g,
+      (match, key: string, sep: string, quote: string, value: string) =>
+        credentialName(key.replace(/^["']|["']$/g, ""))
+          ? `${key}${sep}${quote}${mask(value)}${quote}`
+          : match,
     );
     line = line.replace(
-      /\b((?:[A-Za-z0-9]+[_-])?(?:secret|password|token|api[_-]?key|private[_-]?key))(\s*[:=]\s*)(?!string\b|number\b|boolean\b|unknown\b|any\b)(process\.env\[(?:"[^"]+"|'[^']+')\]|[^\s,;&}"'`]+)/gi,
+      /\b((?:[A-Za-z_][\w-]*?)?(?:secret(?:[_-]?access[_-]?key)?|password|(?:access|refresh)[_-]?token|token|api[_-]?key|private[_-]?key))(\s*[:=]\s*)(?!string\b|number\b|boolean\b|unknown\b|any\b)(process\.env\[(?:"[^"]+"|'[^']+')\]|[^\s,;&}"'`]+)/gi,
       (_match, name: string, sep: string, value: string) =>
         `${name}${sep}${mask(value)}`,
     );
