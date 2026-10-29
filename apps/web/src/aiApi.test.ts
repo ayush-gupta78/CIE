@@ -26,8 +26,12 @@ it("validates response identity, config and graph citation provenance", async ()
       ok: true,
       json: async () => ({
         enabled: false,
-        provider: "openai",
+        providerName: "OpenAI",
+        protocol: "openai-compatible",
+        endpointUrl: "https://api.openai.com/v1/chat/completions",
         model: "gpt-4o-mini",
+        authMode: "bearer",
+        local: false,
         hasKey: false,
         consent: false,
       }),
@@ -37,14 +41,22 @@ it("validates response identity, config and graph citation provenance", async ()
   expect((await getAiConfig()).enabled).toBe(false);
   await putAiConfig({
     enabled: false,
-    provider: "openai",
+    providerName: "OpenAI",
+    protocol: "openai-compatible",
+    endpointUrl: "https://api.openai.com/v1/chat/completions",
     model: "gpt-4o-mini",
+    authMode: "bearer",
+    local: false,
     consent: false,
   });
   expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string)).toEqual({
     enabled: false,
-    provider: "openai",
+    providerName: "OpenAI",
+    protocol: "openai-compatible",
+    endpointUrl: "https://api.openai.com/v1/chat/completions",
     model: "gpt-4o-mini",
+    authMode: "bearer",
+    local: false,
     consent: false,
   });
   const citation = {
@@ -82,6 +94,71 @@ it("validates response identity, config and graph citation provenance", async ()
     })),
   );
   await expect(askAi(graph, "why?")).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+  });
+});
+it("accepts a local keyless endpoint and rejects malformed runtime config and answer", async () => {
+  const config = {
+    enabled: true,
+    consent: true,
+    providerName: "Ollama",
+    protocol: "openai-compatible",
+    endpointUrl: "http://127.0.0.1:11434/v1/chat/completions",
+    model: "llama3",
+    authMode: "none",
+    local: true,
+    hasKey: false,
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => config })),
+  );
+  expect(await getAiConfig()).toEqual(config);
+  const answer = {
+    status: "insufficient",
+    answer: "",
+    citations: [],
+    limitations: [],
+    warnings: ["Question redacted"],
+    repositoryId: "r",
+    revision: 1,
+    manifest: "m",
+    provider: "Ollama",
+    model: "llama3",
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => answer })),
+  );
+  expect((await askAi(graph, "why?")).warnings).toEqual(["Question redacted"]);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...answer, model: "" }),
+    })),
+  );
+  await expect(askAi(graph, "why?")).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...config, local: "yes" }),
+    })),
+  );
+  await expect(getAiConfig()).rejects.toMatchObject({
+    code: "INVALID_RESPONSE",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ ...config, endpointUrl: "not a URL" }),
+    })),
+  );
+  await expect(getAiConfig()).rejects.toMatchObject({
     code: "INVALID_RESPONSE",
   });
 });

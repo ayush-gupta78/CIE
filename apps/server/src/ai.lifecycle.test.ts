@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
+import { mockedProvider } from "./aiTestProvider.fixture.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
 it("rejects an in-flight answer after repository rescan", async () => {
   const root = await mkdtemp(join(tmpdir(), "cie-ai-stale-"));
-  const app = createApp();
+  const app = createApp(mockedProvider);
   const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
   const req = (method: string, url: string, payload?: object) =>
     app.inject({ method, url, headers, payload });
@@ -76,7 +77,7 @@ it("rejects an in-flight answer after repository rescan", async () => {
 
 it("rejects source edited while the model generates an answer", async () => {
   const root = await mkdtemp(join(tmpdir(), "cie-ai-source-race-"));
-  const app = createApp();
+  const app = createApp(mockedProvider);
   const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
   const req = (method: string, url: string, payload?: object) =>
     app.inject({ method, url, headers, payload });

@@ -2,6 +2,21 @@ import { useEffect, useState } from "react";
 import { getAiConfig, putAiConfig, testAiConfig, type AiConfig } from "./aiApi";
 import type { Connection } from "./useLocalHealth";
 
+const openAi = {
+  providerName: "OpenAI",
+  endpointUrl: "https://api.openai.com/v1/chat/completions",
+  model: "gpt-4o-mini",
+  authMode: "bearer" as const,
+  local: false,
+};
+const localDefault = {
+  providerName: "Local model",
+  endpointUrl: "http://127.0.0.1:11434/v1/chat/completions",
+  model: "local-model",
+  authMode: "none" as const,
+  local: true,
+};
+
 export function Settings({
   version,
   statusText,
@@ -14,7 +29,13 @@ export function Settings({
   check: () => void;
 }) {
   const [config, setConfig] = useState<AiConfig | null>(null);
+  const [draft, setDraft] =
+    useState<Omit<AiConfig, "enabled" | "consent" | "protocol" | "hasKey">>(
+      openAi,
+    );
+  const [preset, setPreset] = useState<"openai" | "custom" | "local">("openai");
   const [key, setKey] = useState("");
+  const [clearKey, setClearKey] = useState(false);
   const [consent, setConsent] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -26,6 +47,22 @@ export function Settings({
       .then((value) => {
         if (controller.signal.aborted) return;
         setConfig(value);
+        setDraft({
+          providerName: value.providerName,
+          endpointUrl: value.endpointUrl,
+          model: value.model,
+          authMode: value.authMode,
+          local: value.local,
+        });
+        setPreset(
+          value.local
+            ? "local"
+            : value.endpointUrl === openAi.endpointUrl &&
+                value.model === openAi.model &&
+                value.providerName === openAi.providerName
+              ? "openai"
+              : "custom",
+        );
         setConsent(value.consent);
         setEnabled(value.enabled);
       })
@@ -43,14 +80,22 @@ export function Settings({
     try {
       const result = await putAiConfig({
         enabled,
-        provider: "openai",
-        model: "gpt-4o-mini",
+        protocol: "openai-compatible",
+        preset,
+        ...draft,
         consent,
-        ...(key ? { apiKey: key } : {}),
+        ...(clearKey ? { apiKey: null } : key ? { apiKey: key } : {}),
       });
       setConfig(result);
+      setConsent(result.consent);
+      setEnabled(result.enabled);
       setKey("");
-      setMessage("Assistant settings saved locally.");
+      setClearKey(false);
+      setMessage(
+        result.consent === consent
+          ? "Assistant settings saved locally."
+          : "Endpoint changed; re-enter credentials if required, confirm consent for the saved destination, and save again.",
+      );
     } catch (issue) {
       setMessage(
         issue instanceof Error ? issue.message : "Settings could not be saved.",
@@ -73,13 +118,29 @@ export function Settings({
       setBusy(false);
     }
   }
+  const endpointChanged =
+    draft.endpointUrl !== config?.endpointUrl || draft.local !== config.local;
+  let hostname = "invalid endpoint";
+  try {
+    hostname = new URL(draft.endpointUrl).hostname || hostname;
+  } catch {
+    /* Native URL validation on submit. */
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(hostname);
+  const localEndpoint = draft.local && loopback;
+  const ready =
+    !!config &&
+    !endpointChanged &&
+    config.enabled &&
+    config.consent &&
+    (config.authMode === "none" || config.hasKey);
   return (
     <section className="settings-page" aria-labelledby="settings-title">
       <p className="kicker">Preferences</p>
       <h1 id="settings-title">Settings.</h1>
       <p className="intro-copy">
         Repository analysis stays local. Optional assistant questions send
-        selected source context to an external provider only after explicit
+        selected source context to your configured endpoint only after explicit
         consent.
       </p>
       <dl className="settings-list">
@@ -90,9 +151,9 @@ export function Settings({
         <div>
           <dt>Privacy</dt>
           <dd>
-            Local by default. The optional assistant sends relevant repository
-            context to OpenAI only after consent and an explicit question or
-            provider test. No telemetry.
+            Local by default. Assistant transmission requires consent for the
+            configured endpoint and an explicit question or provider test. No
+            telemetry.
           </dd>
         </div>
         <div>
@@ -117,10 +178,10 @@ export function Settings({
       <section className="ai-settings" aria-label="Assistant settings">
         <h2>Optional assistant</h2>
         <p>
-          Off by default. The API key is held by the local server, never
+          Off by default. Credentials stay in the local server and are never
           returned to the browser. Questions may transmit selected source
-          snippets and graph context to OpenAI; avoid enabling this for
-          confidential code without authorization.
+          snippets, graph context and question text to the endpoint below. Only
+          use code you are authorized to send.
         </p>
         <form
           onSubmit={(event) => {
@@ -129,17 +190,104 @@ export function Settings({
           }}
         >
           <label>
-            Provider <input value="OpenAI" readOnly />
+            Provider preset
+            <select
+              value={preset}
+              onChange={(event) => {
+                const choice = event.target.value as typeof preset;
+                setPreset(choice);
+                setDraft(
+                  choice === "openai"
+                    ? openAi
+                    : choice === "local"
+                      ? localDefault
+                      : {
+                          providerName: "",
+                          endpointUrl: "",
+                          model: "",
+                          authMode: "bearer",
+                          local: false,
+                        },
+                );
+                setConsent(false);
+              }}
+            >
+              <option value="openai">OpenAI</option>
+              <option value="custom">Custom endpoint</option>
+              <option value="local">Local endpoint</option>
+            </select>
           </label>
           <label>
-            Model <input value="gpt-4o-mini" readOnly />
+            Provider name{" "}
+            <input
+              required
+              maxLength={80}
+              value={draft.providerName}
+              readOnly={preset === "openai"}
+              onChange={(event) =>
+                setDraft({ ...draft, providerName: event.target.value })
+              }
+            />
           </label>
           <label>
-            API key{" "}
+            Endpoint URL{" "}
+            <input
+              type="url"
+              required
+              value={draft.endpointUrl}
+              readOnly={preset === "openai"}
+              onChange={(event) => {
+                setDraft({ ...draft, endpointUrl: event.target.value });
+                setConsent(false);
+              }}
+            />
+          </label>
+          <label>
+            Model{" "}
+            <input
+              required
+              value={draft.model}
+              readOnly={preset === "openai"}
+              onChange={(event) =>
+                setDraft({ ...draft, model: event.target.value })
+              }
+            />
+          </label>
+          {preset === "local" && (
+            <label>
+              Authentication{" "}
+              <select
+                value={draft.authMode}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    authMode: event.target.value as "bearer" | "none",
+                  })
+                }
+              >
+                <option value="none">None</option>
+                <option value="bearer">Bearer key</option>
+              </select>
+            </label>
+          )}
+          <p>
+            {localEndpoint ? "Local endpoint" : "External endpoint"}: {hostname}
+            . The endpoint receives questions and bounded source context when
+            you ask.
+          </p>
+          {draft.local && !loopback && (
+            <p role="alert">Local mode requires a loopback endpoint.</p>
+          )}
+          <label>
+            API key (replace saved key){" "}
             <input
               type="password"
               value={key}
-              onChange={(event) => setKey(event.target.value)}
+              onChange={(event) => {
+                setKey(event.target.value);
+                setClearKey(false);
+              }}
+              disabled={draft.authMode === "none"}
               autoComplete="off"
               placeholder={
                 config?.hasKey ? "Saved key (leave blank to keep)" : "Enter key"
@@ -149,11 +297,23 @@ export function Settings({
           <label className="ai-check">
             <input
               type="checkbox"
+              checked={clearKey}
+              disabled={!config?.hasKey}
+              onChange={(event) => {
+                setClearKey(event.target.checked);
+                if (event.target.checked) setKey("");
+              }}
+            />{" "}
+            Clear saved key
+          </label>
+          <label className="ai-check">
+            <input
+              type="checkbox"
               checked={consent}
               onChange={(event) => setConsent(event.target.checked)}
             />{" "}
-            I consent to sending relevant repository context and my questions to
-            OpenAI.
+            I consent to sending relevant repository context and my questions to{" "}
+            {hostname} ({localEndpoint ? "local" : "external"} endpoint).
           </label>
           <label className="ai-check">
             <input
@@ -169,20 +329,20 @@ export function Settings({
               disabled={
                 connection !== "connected" ||
                 busy ||
-                (enabled && (!consent || (!config?.hasKey && !key)))
+                !config ||
+                (draft.local && !loopback) ||
+                (enabled &&
+                  (!consent ||
+                    (draft.authMode === "bearer" &&
+                      (!config.hasKey || clearKey || endpointChanged) &&
+                      !key)))
               }
             >
               Save assistant settings
             </button>
             <button
               type="button"
-              disabled={
-                connection !== "connected" ||
-                busy ||
-                !config?.enabled ||
-                !config?.consent ||
-                !config?.hasKey
-              }
+              disabled={connection !== "connected" || busy || !ready}
               onClick={() => void test()}
             >
               Test provider connection

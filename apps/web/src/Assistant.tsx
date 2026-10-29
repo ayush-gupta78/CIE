@@ -82,6 +82,7 @@ export function Assistant({
       const next = new AbortController();
       verification.current = next;
       pending.current?.abort();
+      pending.current = null;
       setBusy(false);
       setCurrent(false);
       setChecking(true);
@@ -104,6 +105,30 @@ export function Assistant({
         .finally(() => {
           if (!next.signal.aborted) setChecking(false);
         });
+      void getAiConfig(next.signal)
+        .then((value) => {
+          if (next.signal.aborted) return;
+          setConfig((previous) => {
+            if (
+              previous &&
+              JSON.stringify(previous) !== JSON.stringify(value)
+            ) {
+              setTurns([]);
+              setError(
+                "Assistant configuration changed. Review the provider and consent before asking again.",
+              );
+            }
+            return value;
+          });
+        })
+        .catch((issue: unknown) => {
+          if (!next.signal.aborted)
+            setError(
+              issue instanceof Error
+                ? issue.message
+                : "Assistant settings unavailable.",
+            );
+        });
     };
     window.addEventListener("focus", verify);
     return () => {
@@ -119,7 +144,7 @@ export function Assistant({
       busy ||
       !config?.enabled ||
       !config.consent ||
-      !config.hasKey ||
+      (config.authMode === "bearer" && !config.hasKey) ||
       !current ||
       connection !== "connected"
     )
@@ -230,7 +255,9 @@ export function Assistant({
     <section className="ai-assistant" aria-label="Contextual assistant">
       <div className="ai-assistant-head">
         <div>
-          <p className="kicker">Optional · external provider</p>
+          <p className="kicker">
+            Optional · {config?.local ? "local endpoint" : "external provider"}
+          </p>
           <h2>Ask about this graph</h2>
         </div>
         <button type="button" onClick={onOpenSettings}>
@@ -238,8 +265,12 @@ export function Assistant({
         </button>
       </div>
       <p>
-        Explicit questions send bounded source context to OpenAI. Check cited
-        source before relying on an answer.
+        Explicit questions send bounded source context to{" "}
+        {config?.providerName ?? "the configured provider"} at{" "}
+        {config?.endpointUrl
+          ? new URL(config.endpointUrl).hostname
+          : "the configured endpoint"}
+        . Check cited source before relying on an answer.
       </p>
       <p
         className="ai-context"
@@ -258,13 +289,14 @@ export function Assistant({
             ? "Checking assistant configuration…"
             : !config.enabled
               ? "Assistant disabled in Settings."
-              : !config.hasKey || !config.consent
-                ? "Assistant unconfigured: save an API key and explicit consent in Settings."
+              : (config.authMode === "bearer" && !config.hasKey) ||
+                  !config.consent
+                ? "Assistant unconfigured: save credentials if required and explicit endpoint consent in Settings."
                 : busy
                   ? "Processing assistant question…"
                   : !graph
                     ? "Assistant ready; analyze a repository to ask."
-                    : "Assistant ready · OpenAI · gpt-4o-mini · External transmission enabled"}
+                    : `Assistant ready · ${config.providerName} · ${config.model} · ${config.local ? "Local endpoint consent enabled" : "External transmission enabled"}`}
       </p>
       {!current && (
         <p role="alert">
@@ -325,32 +357,35 @@ export function Assistant({
             </article>
           ))}
       </div>
-      {graph && config?.enabled && config.hasKey && config.consent && (
-        <div className="ai-suggestions" aria-label="Suggested questions">
-          <p>Ask about this context:</p>
-          {(selected
-            ? [
-                `What does ${selected.path} depend on?`,
-                `What depends on ${selected.path}?`,
-              ]
-            : [
-                "Which files are connected in this repository?",
-                "Where is analysis incomplete?",
-              ]
-          ).map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => setQuestion(suggestion)}
-              disabled={
-                busy || checking || !current || connection !== "connected"
-              }
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      )}
+      {graph &&
+        config?.enabled &&
+        (config.authMode === "none" || config.hasKey) &&
+        config.consent && (
+          <div className="ai-suggestions" aria-label="Suggested questions">
+            <p>Ask about this context:</p>
+            {(selected
+              ? [
+                  `What does ${selected.path} depend on?`,
+                  `What depends on ${selected.path}?`,
+                ]
+              : [
+                  "Which files are connected in this repository?",
+                  "Where is analysis incomplete?",
+                ]
+            ).map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => setQuestion(suggestion)}
+                disabled={
+                  busy || checking || !current || connection !== "connected"
+                }
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -381,7 +416,7 @@ export function Assistant({
               connection !== "connected" ||
               !config?.enabled ||
               !config.consent ||
-              !config.hasKey
+              (config.authMode === "bearer" && !config.hasKey)
             }
           >
             Ask assistant
@@ -393,6 +428,7 @@ export function Assistant({
                 pending.current?.abort();
                 pending.current = null;
                 setBusy(false);
+                setError("Assistant request cancelled.");
               }}
             >
               Cancel request

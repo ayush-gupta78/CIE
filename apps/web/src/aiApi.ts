@@ -3,10 +3,15 @@ import type { Graph } from "./graphApi";
 
 export type AiConfig = {
   enabled: boolean;
-  provider: "openai";
-  model: "gpt-4o-mini";
+  providerName: string;
+  protocol: "openai-compatible";
+  endpointUrl: string;
+  model: string;
+  authMode: "bearer" | "none";
+  local: boolean;
   hasKey: boolean;
   consent: boolean;
+  preset?: "openai" | "custom" | "local";
 };
 export type AiCitation = {
   fileId: string;
@@ -28,11 +33,22 @@ export type AiAnswer = {
   revision: number;
   manifest: string;
   provider: string;
-  model: "gpt-4o-mini";
+  model: string;
 };
 const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const endpoint = (v: unknown): v is string => {
+  if (!text(v)) return false;
+  try {
+    const url = new URL(v);
+    return (
+      !!url.hostname && (url.protocol === "https:" || url.protocol === "http:")
+    );
+  } catch {
+    return false;
+  }
+};
 const invalid = () =>
   new ApiError(
     "INVALID_RESPONSE",
@@ -43,8 +59,12 @@ function config(value: unknown): AiConfig {
   if (
     !record(value) ||
     typeof value.enabled !== "boolean" ||
-    value.provider !== "openai" ||
-    value.model !== "gpt-4o-mini" ||
+    !text(value.providerName) ||
+    value.protocol !== "openai-compatible" ||
+    !endpoint(value.endpointUrl) ||
+    !text(value.model) ||
+    (value.authMode !== "bearer" && value.authMode !== "none") ||
+    typeof value.local !== "boolean" ||
     typeof value.hasKey !== "boolean" ||
     typeof value.consent !== "boolean"
   )
@@ -55,16 +75,9 @@ export async function getAiConfig(signal?: AbortSignal): Promise<AiConfig> {
   return config(await request("/api/v1/ai/config", { signal }));
 }
 export async function putAiConfig(
-  value: {
-    enabled: boolean;
-    provider: "openai";
-    model: string;
-    apiKey?: string;
-    consent: boolean;
-  },
+  value: Omit<AiConfig, "hasKey"> & { apiKey?: string | null },
   signal?: AbortSignal,
 ): Promise<AiConfig> {
-  if (value.model !== "gpt-4o-mini") throw invalid();
   return config(await request("/api/v1/ai/config", json("PUT", value, signal)));
 }
 export async function testAiConfig(signal?: AbortSignal): Promise<unknown> {
@@ -121,8 +134,8 @@ export async function askAi(
     !result.limitations.every((v: unknown) => typeof v === "string") ||
     !Array.isArray(result.warnings) ||
     !result.warnings.every((v: unknown) => typeof v === "string") ||
-    result.provider !== "openai" ||
-    result.model !== "gpt-4o-mini" ||
+    !text(result.provider) ||
+    !text(result.model) ||
     (result.status === "insufficient" && result.citations.length !== 0)
   )
     throw invalid();

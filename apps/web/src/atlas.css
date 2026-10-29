@@ -2156,7 +2156,7 @@ body {
   cursor: not-allowed;
 }
 .ai-turns {
-  max-height: 340px;
+  max-height: 420px;
   overflow-y: auto;
 }
 .ai-turns article {

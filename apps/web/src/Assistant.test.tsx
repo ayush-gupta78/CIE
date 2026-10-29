@@ -38,8 +38,12 @@ it("asks only with enabled consent, cancels and refuses stale or unverified cita
       return Promise.resolve(
         reply({
           enabled: true,
-          provider: "openai",
+          providerName: "OpenAI",
+          protocol: "openai-compatible",
+          endpointUrl: "https://api.openai.com/v1/chat/completions",
           model: "gpt-4o-mini",
+          authMode: "bearer",
+          local: false,
           hasKey: true,
           consent: true,
         }),
@@ -137,8 +141,12 @@ it("revalidates a cited line against live source before opening detail", async (
     if (url.endsWith("/config"))
       return reply({
         enabled: true,
-        provider: "openai",
+        providerName: "OpenAI",
+        protocol: "openai-compatible",
+        endpointUrl: "https://api.openai.com/v1/chat/completions",
         model: "gpt-4o-mini",
+        authMode: "bearer",
+        local: false,
         hasKey: true,
         consent: true,
       });
@@ -193,4 +201,181 @@ it("revalidates a cited line against live source before opening detail", async (
   expect(fetcher.mock.calls.some(([url]) => url.includes("/source?"))).toBe(
     true,
   );
+});
+it("cancels an unresolved provider call, allows a fresh ask and ignores the late response", async () => {
+  const config = {
+    enabled: true,
+    consent: true,
+    providerName: "Local",
+    protocol: "openai-compatible",
+    endpointUrl: "http://127.0.0.1:11434/v1/chat/completions",
+    model: "llama",
+    authMode: "none",
+    local: true,
+    hasKey: false,
+  };
+  let resolveFirst!: (value: ReturnType<typeof reply>) => void;
+  let asks = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) => {
+      if (url.endsWith("/config")) return Promise.resolve(reply(config));
+      if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
+      if (url.endsWith("/ask")) {
+        asks++;
+        if (asks === 1)
+          return new Promise<ReturnType<typeof reply>>((resolve) => {
+            resolveFirst = resolve;
+          });
+        return Promise.resolve(
+          reply({
+            status: "insufficient",
+            answer: "fresh",
+            citations: [],
+            limitations: [],
+            warnings: ["Question redacted"],
+            repositoryId: "r",
+            revision: 1,
+            manifest: "m",
+            provider: "Local",
+            model: "llama",
+          }),
+        );
+      }
+      return Promise.resolve(reply({}));
+    }),
+  );
+  const user = userEvent.setup();
+  render(
+    <Assistant
+      graph={graph}
+      selected={null}
+      connection="connected"
+      onOpenSettings={() => {}}
+      onCitation={() => {}}
+    />,
+  );
+  await screen.findByText(/Local · llama/);
+  await user.type(
+    screen.getByRole("textbox", { name: /Question about/ }),
+    "Explain",
+  );
+  await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await screen.findByRole("button", { name: "Cancel request" });
+  await user.click(screen.getByRole("button", { name: "Cancel request" }));
+  expect(screen.getByRole("alert").textContent).toMatch(/cancelled/i);
+  await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await screen.findByText("fresh");
+  resolveFirst(
+    reply({
+      status: "insufficient",
+      answer: "late",
+      citations: [],
+      limitations: [],
+      warnings: [],
+      repositoryId: "r",
+      revision: 1,
+      manifest: "m",
+      provider: "Local",
+      model: "llama",
+    }),
+  );
+  expect(screen.queryByText("late")).toBeNull();
+  expect(screen.getByText(/Question redacted/)).toBeTruthy();
+});
+it("reports provider timeout distinctly", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      url.endsWith("/config")
+        ? reply({
+            enabled: true,
+            consent: true,
+            providerName: "OpenAI",
+            protocol: "openai-compatible",
+            endpointUrl: "https://api.openai.com/v1/chat/completions",
+            model: "gpt-4o-mini",
+            authMode: "bearer",
+            local: false,
+            hasKey: true,
+          })
+        : url.endsWith("/graph")
+          ? reply(graph)
+          : {
+              ok: false,
+              json: async () => ({ error: { code: "AI_TIMEOUT" } }),
+            },
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <Assistant
+      graph={graph}
+      selected={null}
+      connection="connected"
+      onOpenSettings={() => {}}
+      onCitation={() => {}}
+    />,
+  );
+  await screen.findByText(/External transmission enabled/);
+  await user.type(
+    screen.getByRole("textbox", { name: /Question about/ }),
+    "Explain",
+  );
+  await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  expect((await screen.findByRole("alert")).textContent).toMatch(/timed out/i);
+});
+it("aborts the pending ask on focus and refreshes changed provider consent", async () => {
+  let changed = false;
+  let askSignal: AbortSignal | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith("/config"))
+        return Promise.resolve(
+          reply({
+            enabled: !changed,
+            consent: !changed,
+            providerName: "OpenAI",
+            protocol: "openai-compatible",
+            endpointUrl: "https://api.openai.com/v1/chat/completions",
+            model: "gpt-4o-mini",
+            authMode: "bearer",
+            local: false,
+            hasKey: true,
+          }),
+        );
+      if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
+      if (url.endsWith("/ask")) {
+        askSignal = init?.signal ?? undefined;
+        return new Promise(() => {});
+      }
+      return Promise.resolve(reply({}));
+    }),
+  );
+  const user = userEvent.setup();
+  render(
+    <Assistant
+      graph={graph}
+      selected={null}
+      connection="connected"
+      onOpenSettings={() => {}}
+      onCitation={() => {}}
+    />,
+  );
+  await screen.findByText(/External transmission enabled/);
+  await user.type(
+    screen.getByRole("textbox", { name: /Question about/ }),
+    "Explain",
+  );
+  await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await screen.findByRole("button", { name: "Cancel request" });
+  changed = true;
+  window.dispatchEvent(new Event("focus"));
+  await waitFor(() => expect(askSignal?.aborted).toBe(true));
+  await screen.findByText("Assistant disabled in Settings.");
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Ask assistant" })
+      .disabled,
+  ).toBe(true);
 });

@@ -21,6 +21,14 @@ import {
   type Source,
 } from "./graph.js";
 import { impact, insights } from "./graphIntelligence.js";
+import {
+  callProvider,
+  validateProviderConfig,
+  ProviderError,
+  type ProviderCaller,
+  type ProviderConfig,
+} from "./aiProvider.js";
+import { redactEvidence } from "./aiRedaction.js";
 
 type Selection = {
   root: string;
@@ -245,7 +253,10 @@ function cursorData(raw: unknown, selection: Selection, dir: string): number {
   }
 }
 
-export function registerRepositoryRoutes(app: FastifyInstance) {
+export function registerRepositoryRoutes(
+  app: FastifyInstance,
+  providerCall: ProviderCaller = callProvider,
+) {
   let selection: Selection | null = null;
   let graph: Graph | null = null;
   let analyzing = false;
@@ -331,6 +342,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         rootName: basename(root),
       };
       graph = null;
+      aiController?.abort("stale_repository");
       return publicSelection(selection);
     } catch (error) {
       throw error instanceof RepoError ? error : fsError(error);
@@ -341,6 +353,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
     revision++;
     selection = null;
     graph = null;
+    aiController?.abort("stale_repository");
     return { selected: false };
   });
   app.post("/api/v1/repository/rescan", async () => {
@@ -355,6 +368,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
     mutation++;
     selection = { ...selected, revision: ++revision };
     graph = null;
+    aiController?.abort("stale_repository");
     return publicSelection(selection);
   });
   app.post("/api/v1/repository/analyze", async (request) => {
@@ -620,6 +634,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
           "Repository view changed. Retry analysis.",
         );
       graph = result;
+      aiController?.abort("stale_repository");
       return result;
     } finally {
       analyzing = false;
@@ -870,6 +885,14 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
   let aiEnabled = false;
   let aiConsent = false;
   let aiKey = "";
+  let aiProvider: Omit<ProviderConfig, "key"> = {
+    preset: "openai",
+    protocol: "openai-compatible",
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini",
+    providerName: "OpenAI",
+    authMode: "bearer",
+  };
   let aiBusy = false;
   let aiLast = 0;
   let aiGeneration = 0;
@@ -878,11 +901,21 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
     enabled: aiEnabled,
     consent: aiConsent,
     hasKey: !!aiKey,
-    provider: "openai" as const,
-    model: "gpt-4o-mini" as const,
+    provider: aiProvider.preset,
+    preset: aiProvider.preset,
+    protocol: aiProvider.protocol,
+    providerName: aiProvider.providerName,
+    endpointUrl: aiProvider.endpoint,
+    local: aiProvider.preset === "local",
+    authMode: aiProvider.authMode,
+    model: aiProvider.model,
   });
   const aiReady = () => {
-    if (!aiEnabled || !aiConsent || !aiKey)
+    if (
+      !aiEnabled ||
+      !aiConsent ||
+      (aiProvider.authMode === "bearer" && !aiKey)
+    )
       throw new RepoError(
         409,
         "AI_DISABLED",
@@ -899,45 +932,19 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
       throw invalid();
     return raw as Record<string, unknown>;
   };
-  const aiCall = async (
+  const aiCall = (
     messages: { role: string; content: string }[],
     signal: AbortSignal,
-  ) => {
-    const result = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${aiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: 450,
-        response_format: { type: "json_object" },
-        messages,
-      }),
+  ) =>
+    providerCall(
+      { ...aiProvider, ...(aiKey ? { key: aiKey } : {}) },
+      messages,
       signal,
-    });
-    if (!result.ok)
-      throw new RepoError(502, "AI_UNAVAILABLE", "AI provider unavailable.");
-    const text = await result.text();
-    if (text.length > 16000)
-      throw new RepoError(502, "AI_UNAVAILABLE", "AI response too large.");
-    try {
-      const value: unknown = JSON.parse(text);
-      const content = (
-        value as { choices?: { message?: { content?: unknown } }[] }
-      ).choices?.[0]?.message?.content;
-      if (typeof content !== "string" || content.length > 8000)
-        throw new Error();
-      return JSON.parse(content) as unknown;
-    } catch {
-      throw new RepoError(502, "AI_UNAVAILABLE", "AI response invalid.");
-    }
-  };
+    );
   const aiRun = async <T>(
-    request: {
+    reply: {
       raw: {
+        writableEnded: boolean;
         on: (event: string, fn: () => void) => void;
         off: (event: string, fn: () => void) => void;
       };
@@ -950,13 +957,34 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
     aiLast = Date.now();
     const controller = new AbortController();
     aiController = controller;
-    const onClose = () => controller.abort();
-    request.raw.on("close", onClose);
-    const timer = setTimeout(() => controller.abort(), 12000);
+    const onClose = () => {
+      if (!reply.raw.writableEnded) controller.abort("client_disconnect");
+    };
+    reply.raw.on("close", onClose);
+    const timer = setTimeout(() => controller.abort("timeout"), 12000);
+    let rejectAbort!: (error: Error) => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    const onAbort = () => rejectAbort(new Error("AI request aborted"));
+    controller.signal.addEventListener("abort", onAbort, { once: true });
     try {
-      return await work(controller.signal);
+      return await Promise.race([work(controller.signal), aborted]);
     } catch (error) {
+      if (controller.signal.aborted) {
+        if (controller.signal.reason === "timeout")
+          throw new RepoError(504, "AI_TIMEOUT", "AI request timed out.");
+        if (controller.signal.reason === "stale_repository")
+          throw new RepoError(
+            409,
+            "STALE_REPOSITORY",
+            "Repository changed during the answer.",
+          );
+        throw new RepoError(409, "AI_CANCELLED", "AI request cancelled.");
+      }
       if (error instanceof RepoError) throw error;
+      if (error instanceof ProviderError)
+        throw new RepoError(error.status, error.code, error.message);
       throw new RepoError(
         503,
         "AI_UNAVAILABLE",
@@ -964,11 +992,13 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
       );
     } finally {
       clearTimeout(timer);
-      request.raw.off("close", onClose);
+      controller.signal.removeEventListener("abort", onAbort);
+      reply.raw.off("close", onClose);
       aiController = null;
       aiBusy = false;
     }
   };
+  app.addHook("onClose", async () => aiController?.abort("shutdown"));
   app.get("/api/v1/ai/config", async () => aiStatus());
   app.put("/api/v1/ai/config", async (request) => {
     const value = aiInput(request.body, [
@@ -976,32 +1006,69 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
       "consent",
       "apiKey",
       "provider",
+      "preset",
+      "providerName",
+      "protocol",
+      "endpointUrl",
+      "authMode",
+      "local",
       "model",
     ]);
     if (
       typeof value.enabled !== "boolean" ||
       typeof value.consent !== "boolean" ||
-      (value.provider !== undefined && value.provider !== "openai") ||
-      (value.model !== undefined && value.model !== "gpt-4o-mini") ||
       (value.apiKey !== undefined &&
-        (typeof value.apiKey !== "string" ||
-          !/^sk-[\x21-\x7e]{1,250}$/.test(value.apiKey)))
+        value.apiKey !== null &&
+        typeof value.apiKey !== "string") ||
+      (value.local !== undefined && typeof value.local !== "boolean")
     )
       throw invalid();
+    const preset = value.preset ?? value.provider ?? aiProvider.preset;
+    const endpoint = value.endpointUrl ?? aiProvider.endpoint;
+    const destinationChanged =
+      endpoint !== aiProvider.endpoint || preset !== aiProvider.preset;
+    const key =
+      destinationChanged || value.apiKey === null
+        ? ""
+        : typeof value.apiKey === "string"
+          ? value.apiKey
+          : aiKey;
+    let next: ProviderConfig;
+    try {
+      next = validateProviderConfig({
+        preset,
+        protocol: value.protocol ?? aiProvider.protocol,
+        endpoint,
+        model: value.model ?? aiProvider.model,
+        providerName: value.providerName ?? aiProvider.providerName,
+        authMode: value.authMode ?? aiProvider.authMode,
+        ...(value.authMode === "none" ||
+        (value.authMode === undefined && aiProvider.authMode === "none")
+          ? {}
+          : { key: key || "validation-placeholder" }),
+      });
+    } catch {
+      throw invalid();
+    }
+    if (value.local !== undefined && value.local !== (next.preset === "local"))
+      throw invalid();
     aiGeneration++;
-    aiController?.abort();
+    aiController?.abort("config_change");
     aiEnabled = value.enabled;
-    aiConsent = value.consent;
+    aiConsent = destinationChanged ? false : value.consent;
+    const safeConfig = { ...next };
+    delete safeConfig.key;
+    aiProvider = safeConfig;
     if (!aiEnabled || !aiConsent) aiKey = "";
-    else if (value.apiKey !== undefined) aiKey = value.apiKey;
+    else aiKey = aiProvider.authMode === "none" ? "" : key;
     return aiStatus();
   });
-  app.post("/api/v1/ai/test", async (request) => {
+  app.post("/api/v1/ai/test", async (request, reply) => {
     const value = aiInput(request.body, []);
     if (Object.keys(value).length) throw invalid();
     aiReady();
     const generation = aiGeneration;
-    const result = await aiRun(request, (signal) =>
+    const result = await aiRun(reply, (signal) =>
       aiCall(
         [
           {
@@ -1027,7 +1094,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
       throw new RepoError(409, "AI_DISABLED", "AI configuration changed.");
     return { ok: true };
   });
-  app.post("/api/v1/ai/ask", async (request) => {
+  app.post("/api/v1/ai/ask", async (request, reply) => {
     const value = aiInput(request.body, [
       "repositoryId",
       "revision",
@@ -1069,10 +1136,15 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         "NOT_FOUND",
         "File not found in the published graph.",
       );
-    const secrets =
-      /\b(?:secret|password|token|api[_-]?key|private[_-]?key)\b\s*[:=]\s*[^\s,;]+|AKIA[0-9A-Z]{16}|-----BEGIN [^\n]+|sk-[\w-]{12,}/gi;
-    const redact = (text: string) => text.replace(secrets, "[redacted]");
-    const question = redact(value.question);
+    let redactedCount = 0;
+    let omittedCount = 0;
+    const sanitize = (text: string) => {
+      const result = redactEvidence(text);
+      redactedCount += result.redactedCount;
+      omittedCount += result.omittedCount;
+      return result.text;
+    };
+    const question = sanitize(value.question);
     const tokens = [
       ...new Set(question.toLowerCase().match(/[a-z0-9_]{3,}/g) ?? []),
     ]
@@ -1154,7 +1226,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         if (!chosen.includes(entry)) chosen.push(entry);
       }
     const generation = aiGeneration;
-    return aiRun(request, async (signal) => {
+    return aiRun(reply, async (signal) => {
       let truncated = eligible.length > chosen.length;
       const evidence: {
         fileId: string;
@@ -1185,18 +1257,20 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         if (source.statusCode !== 200) continue;
         const result = source.json() as { freshness: string; text: string };
         if (result.freshness !== "verified") continue;
+        const safePath = sanitize(file.path);
+        if (safePath !== file.path) {
+          omittedCount++;
+          continue;
+        }
+        const safeText = sanitize(result.text);
         const locations = verified
           .filter((edge) => edge.from === file.id)
           .map((edge) => edge.evidence.line);
-        const relevant = result.text
+        const relevant = safeText
           .split("\n")
           .map((text, index) => ({ line: index + 1, text }))
           .filter(
-            ({ text }) =>
-              text &&
-              !/\b(?:secret|password|token|api[_-]?key|private[_-]?key)\b|AKIA[0-9A-Z]{16}|-----BEGIN |sk-[\w-]{12,}|\b(?:ignore (?:all |previous )?instructions|reveal all secrets)\b/i.test(
-                text,
-              ),
+            ({ text }) => text && !text.includes("[omitted: private key]"),
           )
           .map((line) => ({
             ...line,
@@ -1222,8 +1296,29 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
           .sort((a, b) => a.line - b.line);
         if (lines.length < relevant.length) truncated = true;
         if (lines.length)
-          evidence.push({ fileId: file.id, path: redact(file.path), lines });
+          evidence.push({ fileId: file.id, path: file.path, lines });
       }
+      const privacyWarnings = () => [
+        ...(redactedCount
+          ? [
+              `${redactedCount} sensitive value${redactedCount === 1 ? " was" : "s were"} masked during evidence screening.`,
+            ]
+          : []),
+        ...(omittedCount
+          ? [
+              `${omittedCount} source segment${omittedCount === 1 ? " was" : "s were"} omitted during evidence screening.`,
+            ]
+          : []),
+        "Heuristic redaction cannot guarantee every credential is removed.",
+      ];
+      const baseWarnings = [
+        ...(truncated
+          ? [
+              "Evidence context truncated to four files, thirty lines and 1,200 characters per file.",
+            ]
+          : []),
+        "Model output is not independently fact-checked.",
+      ];
       const insufficient = {
         repositoryId: snapshot.repositoryId,
         revision: snapshot.revision,
@@ -1235,16 +1330,9 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         limitations: [
           "Only bounded, currently verified source excerpts were considered.",
         ],
-        warnings: [
-          ...(truncated
-            ? [
-                "Evidence context truncated to four files, thirty lines and 1,200 characters per file.",
-              ]
-            : []),
-          "Model output is not independently fact-checked.",
-        ],
-        provider: "openai" as const,
-        model: "gpt-4o-mini" as const,
+        warnings: [...privacyWarnings(), ...baseWarnings],
+        provider: aiProvider.preset,
+        model: aiProvider.model,
       };
       if (
         generation !== aiGeneration ||
@@ -1267,7 +1355,7 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
           from: edge.from,
           to: edge.to,
           kind: edge.kind,
-          specifier: redact(edge.specifier),
+          specifier: sanitize(edge.specifier),
           line: edge.evidence.line,
         }));
       const findings = insights(snapshot)
@@ -1290,10 +1378,11 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
         )
         .slice(0, 12)
         .map((item) => ({
-          path: redact(item.path),
-          code: item.code,
+          path: sanitize(item.path),
+          code: sanitize(item.code),
           line: item.line,
         }));
+      insufficient.warnings = [...privacyWarnings(), ...baseWarnings];
       const output = await aiCall(
         [
           {
@@ -1367,7 +1456,9 @@ export function registerRepositoryRoutes(app: FastifyInstance) {
           !line ||
           typeof item.quote !== "string" ||
           item.quote.length < 4 ||
-          !line.text.includes(item.quote)
+          !line.text.includes(item.quote) ||
+          item.quote.includes("[redacted]") ||
+          item.quote.includes("[omitted:")
         )
           return null;
         return {

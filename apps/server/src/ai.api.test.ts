@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
+import { mockedProvider } from "./aiTestProvider.fixture.js";
 
-const app = createApp();
+const app = createApp(mockedProvider);
 const headers = {
   host: "127.0.0.1:3001",
   origin: "http://127.0.0.1:5173",

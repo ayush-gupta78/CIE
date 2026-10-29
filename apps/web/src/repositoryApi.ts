@@ -42,6 +42,10 @@ const messages: Record<string, string> = {
   AI_DISABLED: "Assistant is disabled or unconfigured. Review Settings.",
   AI_BUSY: "Assistant is busy or rate-limited. Wait before asking again.",
   AI_UNAVAILABLE: "AI provider is unavailable or timed out. Try again later.",
+  AI_TIMEOUT: "AI provider request timed out. Try again later.",
+  AI_CANCELLED: "AI provider request was cancelled.",
+  AI_AUTH: "AI provider rejected the configured credentials. Review Settings.",
+  AI_RATE_LIMIT: "AI provider rate limit reached. Wait before asking again.",
   UNAVAILABLE:
     "Local directory is unavailable. Retry or choose another directory.",
 };

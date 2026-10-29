@@ -440,7 +440,8 @@ h1 {
   display: grid;
   gap: 6px;
 }
-.ai-settings input:not([type="checkbox"]) {
+.ai-settings input:not([type="checkbox"]),
+.ai-settings select {
   width: 100%;
   min-width: 0;
   padding: 10px;
