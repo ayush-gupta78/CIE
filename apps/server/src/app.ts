@@ -1,8 +1,10 @@
 import Fastify from "fastify";
+import { readFile, realpath } from "node:fs/promises";
+import { extname, relative, resolve, sep } from "node:path";
 import { registerRepositoryRoutes, RepoError } from "./repository.js";
 import type { ProviderCaller } from "./aiProvider.js";
 
-export function createApp(providerCall?: ProviderCaller) {
+export function createApp(providerCall?: ProviderCaller, staticRoot?: string) {
   const app = Fastify({
     logger: { serializers: { req: (req) => ({ method: req.method }) } },
   });
@@ -46,6 +48,74 @@ export function createApp(providerCall?: ProviderCaller) {
   }));
 
   registerRepositoryRoutes(app, providerCall);
+  if (staticRoot) {
+    const root = resolve(staticRoot);
+    const types: Record<string, string> = {
+      ".html": "text/html; charset=utf-8",
+      ".js": "text/javascript; charset=utf-8",
+      ".css": "text/css; charset=utf-8",
+      ".svg": "image/svg+xml",
+      ".png": "image/png",
+      ".webp": "image/webp",
+      ".ico": "image/x-icon",
+      ".woff2": "font/woff2",
+      ".json": "application/json",
+    };
+    const serve = async (
+      request: { url: string },
+      reply: {
+        code: (status: number) => typeof reply;
+        type: (type: string) => typeof reply;
+        send: (body: Buffer | object) => unknown;
+      },
+    ) => {
+      const pathname = request.url.split("?", 1)[0];
+      let name: string;
+      try {
+        name = decodeURIComponent(pathname);
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Asset not found." } });
+      }
+      const segments = name.split("/").filter(Boolean);
+      if (
+        segments.some(
+          (segment) =>
+            segment === ".." ||
+            segment === "." ||
+            segment.includes("\\") ||
+            segment.includes("\0"),
+        )
+      )
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Asset not found." } });
+      const file = resolve(
+        root,
+        ...(segments.length ? segments : ["index.html"]),
+      );
+      const mime = types[extname(file)];
+      try {
+        const canonical = await realpath(file);
+        const within = relative(root, canonical);
+        if (
+          !mime ||
+          within.startsWith(`..${sep}`) ||
+          within === ".." ||
+          resolve(root) === canonical
+        )
+          throw new Error("Asset outside build");
+        return reply.type(mime).send(await readFile(canonical));
+      } catch {
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Asset not found." } });
+      }
+    };
+    app.get("/", serve);
+    app.get("/*", serve);
+  }
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof RepoError)
       return reply

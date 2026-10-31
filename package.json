@@ -9,6 +9,11 @@
   "scripts": {
     "dev": "pnpm --parallel --stream -r dev",
     "build": "pnpm -r build",
+    "start": "node apps/server/dist/main.js --production",
+    "smoke:production": "node scripts/smoke-production.mjs",
+    "test:integration": "node scripts/integration-production.mjs",
+    "dist:pack": "bash scripts/release-candidate.sh",
+    "dist:verify": "bash scripts/verify-distribution.sh",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "test": "pnpm -r test",
