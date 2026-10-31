@@ -14,6 +14,8 @@ pnpm dev
 
 Open http://127.0.0.1:5173/; the Fastify API listens at http://127.0.0.1:3001/. Both bind to `127.0.0.1`; Vite proxies `/api` to the server. Stop both with Ctrl-C. Ports 5173 and 3001 must be free. The interface loads while the API is offline and reports connectivity accurately.
 
+**M9 distribution status (2026-10-31):** The owner approved M7 for transition to M9, not a release or a declaration that secret screening is complete. Run `pnpm build` then `pnpm start` to serve the built web and API from one Fastify process on `127.0.0.1:3001`, without Vite. Stop with Ctrl-C; port 3001 must be free. If the build is missing, startup fails rather than serving a development fallback. `pnpm smoke:production` checks startup, same-origin responses, Host/Origin rejection, occupied-port failure and shutdown. `pnpm test:integration` exercises selection, analysis, Findings, source freshness and AI-disabled behavior against a synthetic repository. Both passed locally on Linux; M9 awaits independent owner review.
+
 From the cinematic Archive home, choose **Open Local Repository** (or Repository in the top navigation), enter an absolute local folder path such as `/path/to/your/project`, then choose **Open repository**. Browsers cannot provide a normal folder input's absolute local path, so this manual path explicitly authorizes the local server to browse that directory. A `.git` folder is not required. Expand folders, select a file for basic metadata, use Load more for large directories, Refresh to see disk changes, Change repository to select another root, or Close repository to deselect without deleting any files. Selection lives in this server process only and is lost on restart. **Continue Current Session** enters the atlas only when such a selection exists; no recent-project history is stored.
 
 Open **3D atlas** or **2D Graph** from navigation, or switch with **3D Map** / **2D Graph** inside the graph workspace. If this repository has no published graph, choose **Analyze repository**; switching modes never starts analysis. Both modes share one graph, search query, file selection, searchable directory tree, evidence workbench, inspector and file detail. Search by filename or relative path (press `/` to focus search); identical basenames remain distinguishable by their full paths. Choose any eligible file in the tree or scene, including isolated and unsupported files, or follow an evidence-backed relationship. **Open file details** reads permitted real source on demand, with numbered lines and static declaration context. The direction is referencing file → referenced file; selected outgoing links are gold and incoming links blue. Escape clears selection (or search focus).
@@ -24,9 +26,9 @@ Open **Findings** after selecting a repository. If no graph exists, use the expl
 
 Use **View source declaration** on a verified connection in the inspector or Findings to open the referencing file at its captured line, with the referenced target and relationship type shown. Separate declarations to the same target have separate actions. A chain in change impact is displayed changed file → dependent, but each individual import declaration points dependent → referenced file. Source is live disk text, not stored analysis-time bytes: captured SHA-256 must match before an old line is highlighted. If it changed, re-analyze; metadata-only files without a captured hash show live source with freshness unverified, not proven evidence. Binary, invalid-UTF-8, inaccessible and over-budget files retain graph metadata and relationships without a code preview. Source inspection is read-only and never runs repository code.
 
-## Optional assistant (M7; awaiting owner approval)
+## Optional assistant (M7 owner-approved; security limits remain)
 
-**Do not send sensitive repositories to an AI provider.** Independent review reproduced credential leaks in provider-bound evidence; the named regressions and limited variants now pass a scoped independent re-review, but heuristic screening cannot guarantee secrecy. M7 remains an incomplete draft, not owner-approved or live-validated. The matrix describes this branch's draft implementation; fixtures mock provider DNS/HTTPS and do not establish real provider support. Availability, compatibility and pricing are unverified.
+**Do not send sensitive repositories to an AI provider.** Independent review reproduced credential leaks in provider-bound evidence; the named regressions and limited variants passed scoped independent re-review, but heuristic screening cannot guarantee secrecy. The owner approved M7 on 2026-10-31 to begin M9; that is not a security certification or live-provider validation. The matrix describes fixture-tested implementation, not verified real-provider support. Availability, compatibility and pricing are unverified.
 
 | Provider / path                                           | Draft model discovery and selection                                                                                                                                                                                               |
 | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,7 +61,17 @@ pnpm build
 pnpm format:check
 ```
 
-The built server is `apps/server/dist/main.js`; the built static web app is `apps/web/dist/`. Production static hosting needs an equivalent same-origin `/api` proxy and its own security review; no hosted deployment is configured. `.github/workflows/ci.yml` runs these checks on GitHub push/PR for `main`; a local check does not establish remote CI success.
+The build writes server code to `apps/server/dist/main.js` and static web assets to `apps/web/dist/`. `pnpm dev` uses Vite at `:5173` with an API proxy; `pnpm start` serves both from Fastify at `:3001`. Neither mode requires a cloud account or AI key. For a local release-candidate archive on Linux with GNU tar/gzip:
+
+```sh
+pnpm dist:pack
+pnpm dist:verify
+# Extract release/cie-0.1.0-rc.local.tar.gz to a new directory; there:
+pnpm install --prod --frozen-lockfile
+pnpm start
+```
+
+The archive contains compiled server/web output and pinned workspace manifests, not `node_modules`; install production dependencies after extraction. It is unsigned and not a native installer. `pnpm dist:verify` extracts into a temporary directory, installs production-only dependencies and checks the app/API and shutdown. On startup failure, ensure Node/pnpm prerequisites, the web build and free port 3001; a missing build or busy port fails rather than changing ports. After restart, reopen the repository; no selection or AI credential persists. Platform matrix: Linux x86-64 (Fedora, Node 24.19.0) locally tested; Ubuntu GitHub Actions Node 22 CI requires a pushed commit to verify M9; macOS and Windows untested. GNU tar/gzip is required only to create this archive; running an extracted archive uses Node/pnpm. See [M9 release checklist](docs/M9_RELEASE.md). Local checks do not establish remote CI success.
 
 ## API and security
 
@@ -101,4 +113,4 @@ Generated directories (`.git`, `node_modules`, `dist`, `build`, `coverage`, `.ne
 - `ARCHITECTURE.md`: living data flow, trust boundaries, roadmap and append-only decisions.
 - `docs/UI_DESIGN_SPEC.md`: current six-reference design decision plus historical guidance; `docs/screenshots/`: final browser captures and prior M3 evidence.
 
-Archive, Repository, 3D atlas, 2D Graph, Findings, Assistant and Settings navigation work. M0–M6 are owner-approved per the M7 handoff; the M7 correction awaits independent review and owner approval. Provider expansion is draft and unverified live; scalability, expanded language analysis, embeddings and agentic editing remain deferred. No signup, telemetry or cloud-hosted repository storage is required. The newer six-image visual handoff resides locally under ignored `prompts/m3-visual-redesign/references/`; implemented-app captures are in `docs/screenshots/`. The Home background is an original generated illustration bundled with the app rather than an approved screenshot used as a facade.
+Archive, Repository, 3D atlas, 2D Graph, Findings, Assistant and Settings navigation work. M0–M7 are owner-approved as of 2026-10-31; M9 is active and **not released**. Provider expansion has fixture coverage but no live provider validation; secret screening and local filesystem race risks remain open. Scalability, expanded language analysis, embeddings and agentic editing remain deferred. The next visual milestone is a separate post-M9 3D redesign, then M8. No signup, telemetry or cloud-hosted repository storage is required. The newer six-image visual handoff resides locally under ignored `prompts/m3-visual-redesign/references/`; implemented-app captures are in `docs/screenshots/`. The Home background is an original generated illustration bundled with the app rather than an approved screenshot used as a facade.

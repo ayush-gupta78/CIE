@@ -1,13 +1,13 @@
 # CIE — Architecture and Project Context
 
-> Living decision record. Historical milestone descriptions and ADRs retain their original point-in-time status; ADR-033 records the current M7 draft and supersedes conflicting provider-status statements below.
+> Living decision record. Historical milestone descriptions and ADRs retain their original point-in-time status; ADR-035 records the M7 owner transition and ADR-036 the implemented M9 distribution boundary. Earlier implementation/review claims are not rewritten as approvals.
 
 - **Project:** AI Codebase Intelligence Engine (**CIE**, working label; no finalized product name)
 - **Model:** local-first localhost web app. No hosted/Vercel runtime for local code analysis.
-- **Stage:** M0–M6 owner-approved per the M7 owner handoff; M7 implementation awaits independent review and owner approval.
+- **Stage:** M0–M7 owner-approved as of 2026-10-31; M9 is active, not released. Post-M9 3D redesign precedes M8.
 - **Design source:** https://chatgpt.com/share/6addfe15-6604-83ee-865a-89701c1623fd
 - **Primary UI spec:** [`docs/UI_DESIGN_SPEC.md`](docs/UI_DESIGN_SPEC.md)
-- **Current date for decision log:** 2026-10-28
+- **Current date for decision log:** 2026-10-31
 
 ## Why this exists
 
@@ -119,9 +119,11 @@ The following bullets record the prior visual contract. **ADR-022 (2026-10-26) s
 | **M5**      | non-LLM code intelligence                                                        | dependency metrics, impact and cycles                             |
 | **M6**      | file inspector and source references                                             | accurate source/detail navigation                                 |
 | **M7**      | optional LLM adapter/retrieval                                                   | explicit opt-in, grounded explanations                            |
-| **M9**      | tests, docs, distribution/release                                                | runnable tested v1.0                                              |
+| **M9**      | tests, docs, local distribution/release candidate                                | verified local artifact; independent owner review                 |
 | **Post-M9** | improved 3D graph (planned, not part of M7)                                      | separate owner review                                             |
 | **M8**      | performance, security hardening, DX                                              | realistic repo scale and robust failures                          |
+
+Current transition: M7 was approved by the owner on 2026-10-31 with the security limitations below still open. M9 is implemented locally, awaiting independent owner review; public v1.0 readiness is **not** established. The improved 3D graph is a separate post-M9 review, then M8. See [M9 release handoff](docs/M9_RELEASE.md). The historical M9 v1.0 gate was narrowed to a local release candidate because the M7 security warning remains a public-release blocker.
 
 ## Decision log (append; never silently rewrite)
 
@@ -364,3 +366,13 @@ Provider message content carries a compile-time screened-text brand, with a sepa
 [2] https://ai.google.dev/api
 [3] https://docs.ollama.com/api/openai-compatibility
 [4] https://ai.google.dev/api/generate-content
+
+## 2026-10-31 owner transition and M9 distribution
+
+### ADR-035 — Accept M7 for transition without declaring secret screening complete
+
+Status: **Owner-approved M7 transition on 2026-10-31; residual security risks open.** The owner approved moving from M7 to M9 after the scoped review described in ADR-034. This changes milestone authorization, not the historical truth of earlier draft/review entries. The native/compatible provider matrix remains fixture-tested, not live-provider-validated; model availability, pricing and real account behavior remain unknown. Full secret safety is not established: heuristic screening can miss sensitive values, source reads retain local replacement races, and a configured loopback model server may forward data off-machine. Continue to warn against sensitive repositories and require explicit consent for external transmission. Alternatives considered: hold M9 until comprehensive secret detection or paid provider trials (neither can be honestly guaranteed here), or silently treat M7 approval as security certification (rejected). Scope: M9 release preparation and documentation, not a new provider feature or removal of warnings.
+
+### ADR-036 — One loopback origin for the M9 built distribution
+
+Status: **M9 implemented locally; independent owner review pending.** The built Vite web bundle is served by the existing Fastify process on `127.0.0.1:3001`, alongside `/api`; only `/` serves the application entry, and unknown paths return 404 rather than a broad SPA fallback. No production Vite process is required. Development remains Vite `127.0.0.1:5173` proxying API to Fastify `:3001`. A single local origin preserves the exact Host/Origin and JSON mutation gate while avoiding a second production proxy or hosted source-access surface. Static assets are limited to known web MIME types beneath the compiled web output, resolved relative to the installed server module; symlinks escaping that output are refused. An absent build fails startup; a busy port fails without fallback; SIGINT/SIGTERM closes Fastify. Alternatives: two dev servers in release (unnecessary operational burden), hosted static frontend plus proxy (needs separate threat review), desktop installer or embedded browser (deferred). `pnpm start` runs the built single-process runtime. `pnpm dist:pack` produces a versioned local `.tar.gz` with compiled web/server and lockfile/workspace manifests, not bundled dependencies; the recipient installs production packages with `pnpm install --prod --frozen-lockfile`. `pnpm dist:verify` extracted and smoked this archive on Linux; `pnpm smoke:production` and `pnpm test:integration` passed local synthetic checks. No installer, signed artifact, public release or v1.0 readiness is claimed. Readiness checks, residual risks and owner gate are in `docs/M9_RELEASE.md`.
