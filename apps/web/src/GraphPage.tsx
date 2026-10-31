@@ -13,6 +13,8 @@ import { GraphScene2D } from "./GraphScene2D";
 import { GraphFileTree } from "./GraphFileTree";
 import { GraphWorkbench, GraphNeighborhood } from "./GraphWorkbench";
 import { FileDetail } from "./FileDetail";
+import { Assistant } from "./Assistant";
+import type { AiCitation } from "./aiApi";
 import { ApiError, currentRepository, type Selection } from "./repositoryApi";
 import type { Connection } from "./useLocalHealth";
 
@@ -26,6 +28,8 @@ type Props = {
   onModeChange?: (mode: "3d" | "2d") => void;
   onOpenRepository: () => void;
   onStale?: () => void;
+  assistantRequested?: boolean;
+  onOpenSettings?: () => void;
 };
 
 export function GraphPage({
@@ -38,11 +42,24 @@ export function GraphPage({
   onModeChange,
   onOpenRepository,
   onStale,
+  assistantRequested,
+  onOpenSettings,
 }: Props) {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [localMode, setLocalMode] = useState<"3d" | "2d">("3d");
   const mode = controlledMode ?? localMode;
   const [detailOpen, setDetailOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(!!assistantRequested);
+  const [citationLine, setCitationLine] = useState<number | null>(null);
+  useEffect(() => {
+    if (detailOpen && citationLine)
+      document
+        .querySelector(".archive-detail")
+        ?.scrollIntoView({ block: "start" });
+  }, [detailOpen, citationLine]);
+  useEffect(() => {
+    if (assistantRequested) setAssistantOpen(true);
+  }, [assistantRequested]);
   const [visited3D, setVisited3D] = useState(mode === "3d" && !initialEdgeId);
   useEffect(() => {
     if (mode === "3d" && !detailOpen) setVisited3D(true);
@@ -167,6 +184,7 @@ export function GraphPage({
       setFocus2D({ id: null, module: null, token: 0 });
       setDetailOpen(false);
       setEvidenceId(null);
+      setCitationLine(null);
       setSearch("");
       setError("");
       setNoGraph(false);
@@ -293,6 +311,17 @@ export function GraphPage({
       return;
     setSelectedId(edge.from);
     setEvidenceId(edge.id);
+    setCitationLine(null);
+    setDetailOpen(true);
+  };
+  const openCitation = (citation: AiCitation) => {
+    const file = visibleGraph?.files.find(
+      (entry) => entry.id === citation.fileId && entry.path === citation.path,
+    );
+    if (!file) return;
+    setSelectedId(file.id);
+    setEvidenceId(citation.edgeId ?? null);
+    setCitationLine(citation.startLine ?? null);
     setDetailOpen(true);
   };
   const focus = (id: string) => {
@@ -351,7 +380,7 @@ export function GraphPage({
   };
   return (
     <section
-      className={`graph-page ${detailOpen && selected ? "detail-open" : ""}`}
+      className={`graph-page ${detailOpen && selected ? "detail-open" : ""} ${assistantOpen ? "assistant-open" : ""}`}
       aria-labelledby="graph-heading"
     >
       <div className="graph-heading">
@@ -425,6 +454,13 @@ export function GraphPage({
               </button>
             </div>
             <div className="atlas-top-actions">
+              <button
+                type="button"
+                aria-expanded={assistantOpen}
+                onClick={() => setAssistantOpen((open) => !open)}
+              >
+                Assistant
+              </button>
               {detailOpen && (
                 <button type="button" onClick={() => setDetailOpen(false)}>
                   Back to atlas
@@ -443,6 +479,16 @@ export function GraphPage({
               </button>
             </div>
           </div>
+          {assistantOpen && (
+            <Assistant
+              key={visibleGraph?.manifest ?? selectionKey}
+              graph={visibleGraph}
+              selected={selected}
+              connection={connection}
+              onOpenSettings={() => onOpenSettings?.()}
+              onCitation={openCitation}
+            />
+          )}
           {initialPath &&
             (!visibleGraph ||
               (initialManifest && visibleGraph.manifest !== initialManifest) ||
@@ -510,6 +556,7 @@ export function GraphPage({
               model={model}
               file={selected}
               evidenceId={evidenceId}
+              initialLine={citationLine}
               onReanalyze={() => void analyze()}
               onSelect={select}
               onEvidence={openEvidence}

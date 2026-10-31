@@ -672,6 +672,12 @@ body {
   font: 10px/1.6 var(--cie-font-code);
   pointer-events: none;
 }
+.graph-page.assistant-open .graph-summary {
+  position: static;
+  display: inline-block;
+  max-width: calc(100% - 40px);
+  margin: 10px 20px;
+}
 .atlas-unavailable-file {
   margin: 0;
   padding: 9px 16px;
@@ -2106,5 +2112,101 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .archive-action-card:hover:not(:disabled) {
     transform: none;
+  }
+}
+.ai-assistant {
+  padding: 18px clamp(14px, 3vw, 36px);
+  background: #171719;
+  border-bottom: 1px solid #66523a;
+  color: #e8dfd2;
+}
+.ai-assistant-head,
+.ai-assistant form > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ai-assistant h2 {
+  margin: 4px 0;
+  font-size: 21px;
+}
+.ai-assistant h3 {
+  font-size: 13px;
+  margin: 12px 0 4px;
+}
+.ai-assistant p {
+  max-width: 78ch;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ai-assistant button,
+.ai-settings button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid #a98858;
+  background: #28221c;
+  color: #f1e6d8;
+  cursor: pointer;
+}
+.ai-assistant button:disabled,
+.ai-settings button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ai-turns {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.ai-turns article {
+  border-top: 1px solid #584c3d;
+  padding: 10px 0;
+}
+.ai-turns ul {
+  padding-left: 20px;
+}
+.ai-turns li {
+  margin: 5px 0;
+  overflow-wrap: anywhere;
+}
+.ai-assistant form {
+  max-width: 780px;
+  display: grid;
+  gap: 9px;
+}
+.ai-assistant textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  padding: 10px;
+  color: #f1e6d8;
+  background: #0b0b0e;
+  border: 1px solid #66523a;
+  font: inherit;
+}
+.ai-assistant :focus-visible,
+.ai-settings :focus-visible {
+  outline: 2px solid #d8b97e;
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .top-navigation {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 4px 9px;
+  }
+  .top-navigation button:nth-child(6),
+  .top-navigation button:nth-child(7) {
+    display: inline-flex;
+  }
+  .top-navigation button {
+    flex: 0 0 auto;
+  }
+  .ai-assistant-head {
+    align-items: flex-start;
+  }
+  .ai-turns {
+    max-height: 230px;
   }
 }

@@ -422,6 +422,58 @@ h1 {
 .settings-list dd {
   margin: 0;
 }
+.ai-settings {
+  margin: 35px 0;
+  padding: 18px;
+  border: 1px solid var(--cie-border);
+  background: #181716;
+}
+.ai-settings p {
+  line-height: 1.6;
+}
+.ai-settings form {
+  display: grid;
+  gap: 15px;
+  margin-top: 18px;
+}
+.ai-settings form > label:not(.ai-check) {
+  display: grid;
+  gap: 6px;
+}
+.ai-settings input:not([type="checkbox"]),
+.ai-settings select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: var(--cie-text);
+  border: 1px solid var(--cie-border);
+  background: #111;
+  font: inherit;
+}
+.ai-advanced summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.ai-advanced > label:not(.ai-check) {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+.ai-settings .ai-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+}
+.ai-settings .ai-check input {
+  flex: none;
+  margin-top: 4px;
+}
+.ai-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .workspace-link,
 .path-controls button,
 .repo-actions button,

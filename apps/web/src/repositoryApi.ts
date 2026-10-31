@@ -39,6 +39,13 @@ const messages: Record<string, string> = {
     "Source inspection is limited to 256 KiB and 5,000 lines; file metadata and relationships remain available.",
   UNSUPPORTED_SOURCE:
     "Source is binary or not supported UTF-8 text; file metadata and relationships remain available.",
+  AI_DISABLED: "Assistant is disabled or unconfigured. Review Settings.",
+  AI_BUSY: "Assistant is busy or rate-limited. Wait before asking again.",
+  AI_UNAVAILABLE: "AI provider is unavailable or timed out. Try again later.",
+  AI_TIMEOUT: "AI provider request timed out. Try again later.",
+  AI_CANCELLED: "AI provider request was cancelled.",
+  AI_AUTH: "AI provider rejected the configured credentials. Review Settings.",
+  AI_RATE_LIMIT: "AI provider rate limit reached. Wait before asking again.",
   UNAVAILABLE:
     "Local directory is unavailable. Retry or choose another directory.",
 };

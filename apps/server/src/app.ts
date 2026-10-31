@@ -1,7 +1,8 @@
 import Fastify from "fastify";
 import { registerRepositoryRoutes, RepoError } from "./repository.js";
+import type { ProviderCaller } from "./aiProvider.js";
 
-export function createApp() {
+export function createApp(providerCall?: ProviderCaller) {
   const app = Fastify({
     logger: { serializers: { req: (req) => ({ method: req.method }) } },
   });
@@ -44,7 +45,7 @@ export function createApp() {
     version: "0.1.0",
   }));
 
-  registerRepositoryRoutes(app);
+  registerRepositoryRoutes(app, providerCall);
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof RepoError)
       return reply
