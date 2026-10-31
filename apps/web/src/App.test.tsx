@@ -136,7 +136,17 @@ it("supports keyboard navigation through live links while skipping deferred dest
       screen.getByRole("heading", { name: "No repository selected" }),
     ).toBeTruthy(),
   );
-  expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.map(([url]) => url)
+      .sort(),
+  ).toEqual([
+    "/api/v1/ai/config",
+    "/api/v1/ai/providers",
+    "/api/v1/health",
+    "/api/v1/repository",
+  ]);
 });
 
 it("rechecks the in-memory repository after a disconnected to checking to connected recovery", async () => {

@@ -144,6 +144,7 @@ export function Assistant({
       busy ||
       !config?.enabled ||
       !config.consent ||
+      config.connectionStatus !== "verified" ||
       (config.authMode === "bearer" && !config.hasKey) ||
       !current ||
       connection !== "connected"
@@ -292,11 +293,13 @@ export function Assistant({
               : (config.authMode === "bearer" && !config.hasKey) ||
                   !config.consent
                 ? "Assistant unconfigured: save credentials if required and explicit endpoint consent in Settings."
-                : busy
-                  ? "Processing assistant question…"
-                  : !graph
-                    ? "Assistant ready; analyze a repository to ask."
-                    : `Assistant ready · ${config.providerName} · ${config.model} · ${config.local ? "Local endpoint consent enabled" : "External transmission enabled"}`}
+                : config.connectionStatus !== "verified"
+                  ? "Assistant connection not verified. Connect in Settings before asking."
+                  : busy
+                    ? "Processing assistant question…"
+                    : !graph
+                      ? "Assistant ready; analyze a repository to ask."
+                      : `Assistant ready · ${config.providerName} · ${config.model} · ${config.local ? "Local endpoint consent enabled" : "External transmission enabled"}`}
       </p>
       {!current && (
         <p role="alert">
@@ -416,6 +419,7 @@ export function Assistant({
               connection !== "connected" ||
               !config?.enabled ||
               !config.consent ||
+              config.connectionStatus !== "verified" ||
               (config.authMode === "bearer" && !config.hasKey)
             }
           >

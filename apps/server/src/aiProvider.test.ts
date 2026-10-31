@@ -13,7 +13,11 @@ vi.mock("node:https", async (original) => ({
   request: vi.fn(),
 }));
 import { afterEach, expect, it, vi } from "vitest";
-import { callProvider, validateProviderConfig } from "./aiProvider.js";
+import {
+  callProvider,
+  discoverModels,
+  validateProviderConfig,
+} from "./aiProvider.js";
 
 const local = {
   preset: "local",
@@ -48,6 +52,127 @@ async function serve(handler: RequestListener) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+it("discovers models over real loopback GET without sending repository data", async () => {
+  const requests: string[] = [];
+  const server = await serve((req, res) => {
+    requests.push(
+      `${req.method} ${req.url} ${req.headers.authorization ?? ""}`,
+    );
+    res.end(
+      JSON.stringify({
+        data: [{ id: "z-model" }, { id: "a/model" }, { id: "z-model" }],
+      }),
+    );
+  });
+  try {
+    await expect(
+      discoverModels(
+        { ...local, endpoint: server.endpoint },
+        new AbortController().signal,
+      ),
+    ).resolves.toEqual({ models: ["a/model", "z-model"], truncated: false });
+    expect(requests).toEqual(["GET /v1/models "]);
+  } finally {
+    await server.close();
+  }
+});
+
+it("does not follow discovery redirects or expose bearer credentials", async () => {
+  let received = 0;
+  const target = await serve((_req, res) => {
+    received++;
+    res.end();
+  });
+  const source = await serve((_req, res) => {
+    res.writeHead(302, { location: target.endpoint });
+    res.end();
+  });
+  try {
+    await expect(
+      discoverModels(
+        {
+          ...local,
+          authMode: "bearer",
+          key: "secret",
+          endpoint: source.endpoint,
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow();
+    expect(received).toBe(0);
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
+it("rejects nonstandard discovery paths before connecting", async () => {
+  vi.mocked(lookup).mockResolvedValue([
+    { address: "8.8.8.8", family: 4 },
+  ] as never);
+  await expect(
+    discoverModels(
+      { ...custom, endpoint: "https://ai.example/other/chat/completions" },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow();
+  expect(lookup).not.toHaveBeenCalled();
+  expect(httpsRequest).not.toHaveBeenCalled();
+});
+
+it("discovers OpenAI chat alternatives without embeddings over the pinned origin", async () => {
+  vi.mocked(lookup).mockResolvedValue([
+    { address: "8.8.8.8", family: 4 },
+  ] as never);
+  vi.mocked(httpsRequest).mockImplementation(((
+    url: URL,
+    options: RequestOptions,
+    callback: (res: IncomingMessage) => void,
+  ) => {
+    expect(url.href).toBe("https://api.openai.com/v1/models");
+    expect(options.method).toBe("GET");
+    expect((options.headers as Record<string, string>).authorization).toBe(
+      "Bearer secret",
+    );
+    options.lookup!(url.hostname, {}, (_error, address) =>
+      expect(address).toBe("8.8.8.8"),
+    );
+    const req = new EventEmitter() as ClientRequest;
+    req.setTimeout = vi.fn();
+    req.destroy = vi.fn();
+    req.end = (() => {
+      const res = new EventEmitter() as IncomingMessage;
+      res.statusCode = 200;
+      callback(res);
+      queueMicrotask(() => {
+        res.emit(
+          "data",
+          Buffer.from(
+            JSON.stringify({
+              data: [
+                { id: "gpt-4o-mini" },
+                { id: "gpt-4o" },
+                { id: "text-embedding-3-small" },
+              ],
+            }),
+          ),
+        );
+        res.emit("end");
+      });
+      return req;
+    }) as ClientRequest["end"];
+    return req;
+  }) as typeof httpsRequest);
+  const config = {
+    ...custom,
+    preset: "openai" as const,
+    endpoint: "https://api.openai.com/v1/chat/completions",
+  };
+  await expect(
+    discoverModels(config, new AbortController().signal),
+  ).resolves.toEqual({ models: ["gpt-4o", "gpt-4o-mini"], truncated: false });
+});
 
 it("validates custom HTTPS and rejects unauthenticated remote providers", () => {
   expect(
@@ -251,10 +376,10 @@ it("sends OpenAI-compatible JSON to local loopback without credentials", async (
     expect(authorization).toBeUndefined();
     expect(body).toMatchObject({
       model: "test-model",
-      temperature: 0,
       max_tokens: 450,
       messages,
     });
+    expect(body.temperature).toBeUndefined();
     expect(body.response_format).toBeUndefined();
   } finally {
     await server.close();
@@ -336,6 +461,8 @@ it("does not follow redirects to private destinations", async () => {
 
 it.each([
   [401, "AI_AUTH"],
+  [403, "AI_FORBIDDEN"],
+  [404, "AI_NOT_FOUND"],
   [429, "AI_RATE_LIMIT"],
 ])("returns a safe provider state for HTTP %i", async (status, code) => {
   const server = await serve((_req, res) => {
@@ -343,17 +470,120 @@ it.each([
     res.end("credential text must not escape");
   });
   try {
-    await expect(
-      callProvider(
-        validateProviderConfig({ ...local, endpoint: server.endpoint }),
-        messages,
-        new AbortController().signal,
-      ),
-    ).rejects.toMatchObject({ code });
+    const error = await callProvider(
+      validateProviderConfig({ ...local, endpoint: server.endpoint }),
+      messages,
+      new AbortController().signal,
+    ).catch((error: unknown) => error);
+    expect(error).toMatchObject({ code });
+    expect(String(error)).not.toContain("credential text must not escape");
   } finally {
     await server.close();
   }
 });
+
+it.each([
+  ["gemini", { promptFeedback: { blockReason: "SAFETY" } }, "AI_SAFETY"],
+  [
+    "gemini",
+    {
+      candidates: [
+        {
+          finishReason: "SAFETY",
+          content: { parts: [{ text: '{"ok":true}' }] },
+        },
+      ],
+    },
+    "AI_SAFETY",
+  ],
+  [
+    "gemini",
+    {
+      candidates: [
+        {
+          finishReason: "MAX_TOKENS",
+          content: { parts: [{ text: '{"ok":true}' }] },
+        },
+      ],
+    },
+    "AI_INCOMPLETE",
+  ],
+  [
+    "anthropic",
+    {
+      stop_reason: "max_tokens",
+      content: [{ type: "text", text: '{"ok":true}' }],
+    },
+    "AI_INCOMPLETE",
+  ],
+  [
+    "anthropic",
+    {
+      stop_reason: "refusal",
+      content: [{ type: "text", text: '{"ok":true}' }],
+    },
+    "AI_SAFETY",
+  ],
+  [
+    "anthropic",
+    {
+      stop_reason: "end_turn",
+      content: [
+        { type: "thinking", thinking: "private" },
+        { type: "text", text: '{"ok":' },
+        { type: "text", text: "true}" },
+      ],
+    },
+    "success",
+  ],
+] as const)(
+  "normalizes %s safety and finish responses",
+  async (preset, payload, code) => {
+    vi.mocked(lookup).mockResolvedValue([
+      { address: "8.8.8.8", family: 4 },
+    ] as never);
+    vi.mocked(httpsRequest).mockImplementation(((
+      _url: URL,
+      _options: RequestOptions,
+      callback: (res: IncomingMessage) => void,
+    ) => {
+      const req = new EventEmitter() as ClientRequest;
+      req.setTimeout = vi.fn();
+      req.destroy = vi.fn();
+      req.end = (() => {
+        const res = new EventEmitter() as IncomingMessage;
+        res.statusCode = 200;
+        callback(res);
+        queueMicrotask(() => {
+          res.emit("data", Buffer.from(JSON.stringify(payload)));
+          res.emit("end");
+        });
+        return req;
+      }) as ClientRequest["end"];
+      return req;
+    }) as typeof httpsRequest);
+    const config = validateProviderConfig({
+      preset,
+      protocol: preset,
+      endpoint:
+        preset === "gemini"
+          ? "https://generativelanguage.googleapis.com/v1beta/models"
+          : "https://api.anthropic.com/v1/messages",
+      model: "model-one",
+      providerName: preset,
+      authMode: "bearer",
+      key: "secret",
+    });
+    const pending = callProvider(
+      config,
+      messages,
+      new AbortController().signal,
+    );
+    if (code === "success")
+      await expect(pending).resolves.toEqual({ ok: true });
+    else await expect(pending).rejects.toMatchObject({ code });
+  },
+);
 
 it("revalidates changed config at the transport boundary", async () => {
   const config = validateProviderConfig({

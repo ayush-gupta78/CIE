@@ -6,6 +6,8 @@ export const mockedProvider: ProviderCaller = async (
   messages,
   signal,
 ) => {
+  if (messages[1]?.content === "Connectivity test. No repository content.")
+    return { ok: true };
   const result = await fetch("http://test.invalid", {
     method: "POST",
     body: JSON.stringify({ messages }),

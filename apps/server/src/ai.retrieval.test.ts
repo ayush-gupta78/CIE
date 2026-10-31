@@ -69,6 +69,7 @@ it("retrieves relevant late lines, verified graph relationships and diagnostics 
       consent: true,
       apiKey: "sk-test",
     });
+    expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
     const body = {
       repositoryId: graph.repositoryId,
       revision: graph.revision,
@@ -200,6 +201,7 @@ it("sends only screened source while keeping original file and line provenance f
       consent: true,
       apiKey: "synthetic-test-key",
     });
+    expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
     const body = {
       repositoryId: graph.repositoryId,
       revision: graph.revision,

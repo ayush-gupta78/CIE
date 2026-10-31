@@ -450,6 +450,15 @@ h1 {
   background: #111;
   font: inherit;
 }
+.ai-advanced summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.ai-advanced > label:not(.ai-check) {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
 .ai-settings .ai-check {
   display: flex;
   align-items: flex-start;

@@ -84,7 +84,15 @@ it("answers through a deliberately configured unauthenticated loopback-compatibl
   let fileId = "";
   const provider = createServer(async (req, res) => {
     expect(req.headers.authorization).toBeUndefined();
-    for await (const chunk of req) transmitted += chunk;
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    if (body.includes("Connectivity test. No repository content.")) {
+      res.end(
+        JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }),
+      );
+      return;
+    }
+    transmitted += body;
     res.setHeader("content-type", "application/json");
     res.end(
       JSON.stringify({
@@ -139,6 +147,7 @@ it("answers through a deliberately configured unauthenticated loopback-compatibl
     expect(
       (await req("PUT", "/api/v1/ai/config", config)).json(),
     ).toMatchObject({ consent: true, hasKey: false });
+    expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
     const answer = await req("POST", "/api/v1/ai/ask", {
       repositoryId: graph.repositoryId,
       revision: graph.revision,

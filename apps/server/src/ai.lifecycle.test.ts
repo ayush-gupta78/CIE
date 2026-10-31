@@ -29,6 +29,7 @@ it("rejects an in-flight answer after repository rescan", async () => {
       consent: true,
       apiKey: "sk-test",
     });
+    expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
     let release!: () => void;
     const started = new Promise<void>((resolve) => {
       vi.stubGlobal(
@@ -98,6 +99,7 @@ it("rejects source edited while the model generates an answer", async () => {
       consent: true,
       apiKey: "sk-test-only-not-a-real-credential",
     });
+    expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {

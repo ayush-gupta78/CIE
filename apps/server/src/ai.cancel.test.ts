@@ -49,6 +49,7 @@ async function setup() {
     consent: true,
     apiKey: "sk-test-only-key",
   });
+  expect((await req("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
   const body = {
     repositoryId: graph.repositoryId,
     revision: graph.revision,

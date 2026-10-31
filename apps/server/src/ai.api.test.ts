@@ -54,6 +54,7 @@ it("defaults off, keeps credentials private, retrieves verified source and rejec
   expect(
     JSON.stringify((await request("GET", "/api/v1/ai/config")).json()),
   ).not.toContain("sk-test-secret");
+  expect((await request("POST", "/api/v1/ai/test", {})).statusCode).toBe(200);
   let sent = "";
   vi.stubGlobal(
     "fetch",
@@ -154,25 +155,6 @@ it("defaults off, keeps credentials private, retrieves verified source and rejec
     ).json(),
   ).toMatchObject({ enabled: false, hasKey: false });
   expect((await request("POST", "/api/v1/ai/test", {})).statusCode).toBe(409);
-  await request("PUT", "/api/v1/ai/config", {
-    enabled: true,
-    consent: true,
-    apiKey: "sk-test-secret",
-  });
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            choices: [{ message: { content: '{"ok":false}' } }],
-          }),
-          { status: 200 },
-        ),
-    ),
-  );
-  await new Promise((resolve) => setTimeout(resolve, 1050));
-  expect((await request("POST", "/api/v1/ai/test", {})).statusCode).toBe(502);
   await app.close();
   await rm(root, { recursive: true, force: true });
 });

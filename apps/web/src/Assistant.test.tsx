@@ -46,6 +46,7 @@ it("asks only with enabled consent, cancels and refuses stale or unverified cita
           local: false,
           hasKey: true,
           consent: true,
+          connectionStatus: "verified",
         }),
       );
     if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
@@ -149,6 +150,7 @@ it("revalidates a cited line against live source before opening detail", async (
         local: false,
         hasKey: true,
         consent: true,
+        connectionStatus: "verified",
       });
     if (url.endsWith("/graph")) return reply(graph);
     if (url.endsWith("/ask"))
@@ -206,6 +208,7 @@ it("cancels an unresolved provider call, allows a fresh ask and ignores the late
   const config = {
     enabled: true,
     consent: true,
+    connectionStatus: "verified",
     providerName: "Local",
     protocol: "openai-compatible",
     endpointUrl: "http://127.0.0.1:11434/v1/chat/completions",
@@ -291,6 +294,7 @@ it("reports provider timeout distinctly", async () => {
         ? reply({
             enabled: true,
             consent: true,
+            connectionStatus: "verified",
             providerName: "OpenAI",
             protocol: "openai-compatible",
             endpointUrl: "https://api.openai.com/v1/chat/completions",
@@ -336,6 +340,7 @@ it("aborts the pending ask on focus and refreshes changed provider consent", asy
           reply({
             enabled: !changed,
             consent: !changed,
+            connectionStatus: "verified",
             providerName: "OpenAI",
             protocol: "openai-compatible",
             endpointUrl: "https://api.openai.com/v1/chat/completions",
@@ -374,6 +379,40 @@ it("aborts the pending ask on focus and refreshes changed provider consent", asy
   window.dispatchEvent(new Event("focus"));
   await waitFor(() => expect(askSignal?.aborted).toBe(true));
   await screen.findByText("Assistant disabled in Settings.");
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Ask assistant" })
+      .disabled,
+  ).toBe(true);
+});
+
+it("does not claim readiness for an untested provider", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      reply({
+        enabled: true,
+        consent: true,
+        providerName: "OpenAI",
+        protocol: "openai-compatible",
+        endpointUrl: "https://api.openai.com/v1/chat/completions",
+        model: "gpt-4o-mini",
+        authMode: "bearer",
+        local: false,
+        hasKey: true,
+        connectionStatus: "untested",
+      }),
+    ),
+  );
+  render(
+    <Assistant
+      graph={graph}
+      selected={null}
+      connection="connected"
+      onOpenSettings={() => {}}
+      onCitation={() => {}}
+    />,
+  );
+  await screen.findByText(/connection.*not verified/i);
   expect(
     screen.getByRole<HTMLButtonElement>("button", { name: "Ask assistant" })
       .disabled,
