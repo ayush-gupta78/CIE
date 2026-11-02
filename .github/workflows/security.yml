@@ -1,0 +1,71 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - run: corepack enable
+      - run: pnpm audit --audit-level high
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install checksum-verified Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz
+          printf '%s  %s\n' \
+            ba6dbb656933921c775ee5a2d1c13a91046e7952e9d919f9bac4cec61d628e7d \
+            "$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Prove scanner detects a synthetic token
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'token = "ghp_%s%s"\n' 'aBcDeFgHiJkLmNoPqRsTuVwXyZ' '0123456789' > "$RUNNER_TEMP/fixture.txt"
+          status=0
+          "$RUNNER_TEMP/gitleaks" detect --no-git --source "$RUNNER_TEMP/fixture.txt" \
+            --redact --no-banner || status=$?
+          test "$status" -eq 1
+      - name: Scan full Git history for new secrets
+        run: >-
+          "$RUNNER_TEMP/gitleaks" detect --source . --redact --no-banner
+          --baseline-path .github/gitleaks-baseline.json
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read # CodeQL needs workflow metadata on private repositories.
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3.39.1
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3.39.1

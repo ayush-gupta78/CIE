@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
 
@@ -144,14 +144,14 @@ it("screens question, relationship specifiers and sensitive paths before seriali
       fileId,
       question: "Explain ordinary password=question-secret",
     });
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode, response.json().error?.code).toBe(200);
     expect(sent).not.toContain("metadata-secret");
     expect(sent).not.toContain("question-secret");
     const payload = JSON.parse(sent);
     expect(payload.evidence.map((item: { path: string }) => item.path)).toEqual(
       ["caller.ts"],
     );
-    expect(payload.relationships[0].specifier).toContain("[redacted]");
+    expect(payload.relationships).toEqual([]);
   } finally {
     await app.close();
     await rm(root, { recursive: true, force: true });

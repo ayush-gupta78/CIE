@@ -27,6 +27,25 @@ const graph = {
   partial: false,
 } as Graph;
 const reply = (value: unknown) => ({ ok: true, json: async () => value });
+const preview = (fileId?: string) =>
+  reply({
+    id: "opaque",
+    payload: "safe evidence",
+    snapshot: {
+      repositoryId: "r",
+      revision: 1,
+      manifest: "m",
+      ...(fileId ? { fileId } : {}),
+    },
+    destination: {
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      protocol: "openai-compatible",
+      model: "gpt-4o-mini",
+      providerName: "OpenAI",
+    },
+    expiresAt: Date.now() + 60_000,
+    warnings: [],
+  });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -50,7 +69,8 @@ it("asks only with enabled consent, cancels and refuses stale or unverified cita
         }),
       );
     if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
-    if (url.endsWith("/ask"))
+    if (url.endsWith("/preview")) return Promise.resolve(preview("a"));
+    if (url.endsWith("/approve"))
       return new Promise<ReturnType<typeof reply>>((resolve) => {
         resolveAsk = resolve;
       });
@@ -84,8 +104,13 @@ it("asks only with enabled consent, cancels and refuses stale or unverified cita
     "What is this?",
   );
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   await waitFor(() =>
-    expect(fetcher.mock.calls.some(([url]) => url.endsWith("/ask"))).toBe(true),
+    expect(fetcher.mock.calls.some(([url]) => url.endsWith("/approve"))).toBe(
+      true,
+    ),
   );
   await user.click(screen.getByRole("button", { name: "Cancel request" }));
   resolveAsk(
@@ -104,6 +129,9 @@ it("asks only with enabled consent, cancels and refuses stale or unverified cita
   );
   expect(screen.queryByText("late")).toBeNull();
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   resolveAsk(
     reply({
       status: "cited",
@@ -153,7 +181,8 @@ it("revalidates a cited line against live source before opening detail", async (
         connectionStatus: "verified",
       });
     if (url.endsWith("/graph")) return reply(graph);
-    if (url.endsWith("/ask"))
+    if (url.endsWith("/preview")) return preview();
+    if (url.endsWith("/approve"))
       return reply({
         status: "cited",
         answer: "cited",
@@ -198,6 +227,9 @@ it("revalidates a cited line against live source before opening detail", async (
     "Explain",
   );
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   await user.click(await screen.findByRole("button", { name: /a.ts:2/ }));
   await waitFor(() => expect(onCitation).toHaveBeenCalledWith(citation));
   expect(fetcher.mock.calls.some(([url]) => url.includes("/source?"))).toBe(
@@ -224,7 +256,8 @@ it("cancels an unresolved provider call, allows a fresh ask and ignores the late
     vi.fn((url: string) => {
       if (url.endsWith("/config")) return Promise.resolve(reply(config));
       if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
-      if (url.endsWith("/ask")) {
+      if (url.endsWith("/preview")) return Promise.resolve(preview());
+      if (url.endsWith("/approve")) {
         asks++;
         if (asks === 1)
           return new Promise<ReturnType<typeof reply>>((resolve) => {
@@ -264,10 +297,16 @@ it("cancels an unresolved provider call, allows a fresh ask and ignores the late
     "Explain",
   );
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   await screen.findByRole("button", { name: "Cancel request" });
   await user.click(screen.getByRole("button", { name: "Cancel request" }));
   expect(screen.getByRole("alert").textContent).toMatch(/cancelled/i);
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   await screen.findByText("fresh");
   resolveFirst(
     reply({
@@ -351,7 +390,8 @@ it("aborts the pending ask on focus and refreshes changed provider consent", asy
           }),
         );
       if (url.endsWith("/graph")) return Promise.resolve(reply(graph));
-      if (url.endsWith("/ask")) {
+      if (url.endsWith("/preview")) return Promise.resolve(preview());
+      if (url.endsWith("/approve")) {
         askSignal = init?.signal ?? undefined;
         return new Promise(() => {});
       }
@@ -374,6 +414,9 @@ it("aborts the pending ask on focus and refreshes changed provider consent", asy
     "Explain",
   );
   await user.click(screen.getByRole("button", { name: "Ask assistant" }));
+  await user.click(
+    await screen.findByRole("button", { name: /Approve and send/ }),
+  );
   await screen.findByRole("button", { name: "Cancel request" });
   changed = true;
   window.dispatchEvent(new Event("focus"));

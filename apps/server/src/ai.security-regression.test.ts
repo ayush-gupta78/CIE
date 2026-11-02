@@ -10,7 +10,7 @@ vi.mock("./aiProvider.js", async (importOriginal) => ({
     truncated: false,
   })),
 }));
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
 const key = "example-key";

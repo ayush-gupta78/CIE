@@ -9,7 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 let base: string;
 let root: string;

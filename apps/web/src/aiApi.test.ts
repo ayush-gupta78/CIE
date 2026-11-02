@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { askAi, getAiConfig, putAiConfig, verifiedCitation } from "./aiApi";
+import { approveAi, getAiConfig, putAiConfig, verifiedCitation } from "./aiApi";
 import type { Graph } from "./graphApi";
 
 const graph = {
@@ -93,7 +93,7 @@ it("validates response identity, config and graph citation provenance", async ()
       }),
     })),
   );
-  await expect(askAi(graph, "why?")).rejects.toMatchObject({
+  await expect(approveAi(graph, "opaque")).rejects.toMatchObject({
     code: "INVALID_RESPONSE",
   });
 });
@@ -130,7 +130,9 @@ it("accepts a local keyless endpoint and rejects malformed runtime config and an
     "fetch",
     vi.fn(async () => ({ ok: true, json: async () => answer })),
   );
-  expect((await askAi(graph, "why?")).warnings).toEqual(["Question redacted"]);
+  expect((await approveAi(graph, "opaque")).warnings).toEqual([
+    "Question redacted",
+  ]);
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => ({
@@ -138,7 +140,7 @@ it("accepts a local keyless endpoint and rejects malformed runtime config and an
       json: async () => ({ ...answer, model: "" }),
     })),
   );
-  await expect(askAi(graph, "why?")).rejects.toMatchObject({
+  await expect(approveAi(graph, "opaque")).rejects.toMatchObject({
     code: "INVALID_RESPONSE",
   });
   vi.stubGlobal(

@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
 

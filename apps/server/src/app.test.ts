@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 let app: ReturnType<typeof createApp>;
 beforeEach(() => {
@@ -25,6 +25,22 @@ describe("local API", () => {
         expect((await built.inject({ url: "/", headers })).body).toContain(
           "CIE production",
         );
+        for (const url of ["/", "/app.js", "/api/v1/health"]) {
+          const response = await built.inject({ url, headers });
+          expect(response.headers["content-security-policy"]).toContain(
+            "script-src 'self'",
+          );
+          expect(response.headers["content-security-policy"]).toContain(
+            "frame-ancestors 'none'",
+          );
+          expect(response.headers["content-security-policy"]).not.toContain(
+            "unsafe-eval",
+          );
+          expect(response.headers["x-frame-options"]).toBe("DENY");
+          expect(response.headers["x-content-type-options"]).toBe("nosniff");
+          expect(response.headers["referrer-policy"]).toBe("no-referrer");
+          expect(response.headers["permissions-policy"]).toContain("camera=()");
+        }
         expect(
           (await built.inject({ url: "/app.js", headers })).headers[
             "content-type"

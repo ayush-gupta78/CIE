@@ -1,4 +1,5 @@
 import { createApp } from "./app.js";
+import { randomBytes } from "node:crypto";
 import { access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -7,11 +8,15 @@ const production = process.argv.includes("--production");
 const webRoot = production
   ? resolve(fileURLToPath(new URL("../../web/dist/", import.meta.url)))
   : undefined;
-const app = createApp(undefined, webRoot);
+const pairingSecret = randomBytes(32).toString("base64url");
+const app = createApp(undefined, webRoot, pairingSecret);
 
 try {
   if (webRoot) await access(resolve(webRoot, "index.html"));
   await app.listen({ host: "127.0.0.1", port: 3001 });
+  process.stderr.write(
+    `CIE pairing secret (enter in the local browser; do not share): ${pairingSecret}\n`,
+  );
 } catch (error) {
   app.log.error(error);
   await app.close();

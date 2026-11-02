@@ -11,13 +11,26 @@ const fixture = await mkdtemp(join(tmpdir(), "cie-m9-integration-"));
 const child = spawn(
   process.execPath,
   ["apps/server/dist/main.js", "--production"],
-  { cwd: root, stdio: "ignore" },
+  { cwd: root, stdio: ["ignore", "ignore", "pipe"] },
 );
+let secret = "";
+child.stderr.on("data", (chunk) => {
+  const match =
+    /CIE pairing secret \(enter in the local browser; do not share\): ([A-Za-z0-9_-]+)/.exec(
+      String(chunk),
+    );
+  if (match) secret = match[1];
+});
+let cookie = "";
+let csrf = "";
 const base = "http://127.0.0.1:3001/api/v1";
 const call = async (route, method = "GET", body) => {
   const response = await fetch(base + route, {
     method,
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    headers: {
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+      ...(cookie ? { Cookie: cookie, "X-CIE-CSRF": csrf } : {}),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(15000),
   });
@@ -49,6 +62,17 @@ try {
     await delay(100);
   }
   assert.ok(ready, "API failed to start");
+  assert.ok(secret, "terminal pairing secret unavailable");
+  assert.equal((await call("/repository")).status, 401);
+  const paired = await fetch(base + "/auth/pair", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret }),
+  });
+  assert.equal(paired.status, 200);
+  cookie = paired.headers.get("set-cookie").split(";", 1)[0];
+  csrf = (await paired.json()).csrf;
+  secret = "";
   assert.deepEqual((await call("/repository")).data, { selected: false });
   assert.equal((await call("/ai/config")).data.enabled, false);
   assert.equal((await call("/repository/graph")).status, 409);

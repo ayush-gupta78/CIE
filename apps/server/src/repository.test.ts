@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 let app: ReturnType<typeof createApp>;
 let base: string;

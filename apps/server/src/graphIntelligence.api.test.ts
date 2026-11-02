@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 it("serves exact snapshot-bound insights and impact without reanalysis", async () => {
   const root = await mkdtemp(join(tmpdir(), "cie-m5-"));
