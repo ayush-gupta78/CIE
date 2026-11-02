@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 import { mockedProvider } from "./aiTestProvider.fixture.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
@@ -79,6 +79,7 @@ it("retrieves relevant late lines, verified graph relationships and diagnostics 
       fileId,
     };
     const answer = (await req("POST", "/api/v1/ai/ask", body)).json();
+    expect(answer.error?.code).toBeUndefined();
     expect(answer.citations).toMatchObject([{ fileId, line: 41 }]);
     const transmitted = JSON.parse(sent).messages;
     const data = JSON.parse(transmitted[1].content);

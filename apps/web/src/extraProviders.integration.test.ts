@@ -5,7 +5,7 @@ import type { ClientRequest, IncomingMessage, RequestOptions } from "node:http";
 import { request } from "node:https";
 import { request as httpRequest } from "node:http";
 import { expect, it, vi } from "vitest";
-import { createApp } from "../../server/src/app.js";
+import { createApp } from "../../server/src/testApp.js";
 
 vi.mock("node:dns/promises", async (original) => ({
   ...(await original()),

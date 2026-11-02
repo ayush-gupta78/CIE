@@ -51,7 +51,10 @@ async function serve(handler: RequestListener) {
   };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
 
 it("discovers models over real loopback GET without sending repository data", async () => {
   const requests: string[] = [];

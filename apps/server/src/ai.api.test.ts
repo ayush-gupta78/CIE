@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 import { mockedProvider } from "./aiTestProvider.fixture.js";
 
 const app = createApp(mockedProvider);

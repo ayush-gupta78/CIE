@@ -1,4 +1,5 @@
 import type { ProviderSafeText } from "./repository.js";
+import { redactEvidence } from "./aiRedaction.js";
 import { isIP } from "node:net";
 import { hostedPresets, manualPresets } from "./aiProviderRegistry.js";
 import { post } from "./aiProviderTransport.js";
@@ -39,6 +40,7 @@ export type ProviderCaller = (
   }[],
   signal: AbortSignal,
   purpose?: "test",
+  approvedPayload?: string,
 ) => Promise<unknown>;
 export class ProviderError extends Error {
   constructor(
@@ -187,16 +189,15 @@ export function validateProviderConfig(value: unknown): ProviderConfig {
   };
 }
 
-/** POST a chat completion; return parsed JSON message content. Caller owns the AbortSignal. */
-export async function callProvider(
+/** The exact bytes of the provider request body, excluding authentication headers. */
+export function serializeProviderRequest(
   rawConfig: ProviderConfig,
   messages: {
     role: "system" | "user" | "assistant";
-    content: ProviderSafeText;
+    content: string;
   }[],
-  signal: AbortSignal,
   purpose?: "test",
-): Promise<unknown> {
+): string {
   const config = validateProviderConfig(rawConfig);
   const maxTokens = purpose === "test" ? 64 : 450;
   const system = messages
@@ -235,7 +236,97 @@ export async function callProvider(
               ? { response_format: { type: "json_object" } }
               : {}),
           };
-  const result = await post(config, body, signal);
+  return JSON.stringify(body);
+}
+
+/** Fail closed on newly detected material in the exact provider-bound JSON fields. */
+export function assertScreenedPayload(serialized: string): void {
+  const visit = (value: unknown): void => {
+    if (typeof value === "string") {
+      const screened = redactEvidence(value);
+      if (
+        screened.text !== value ||
+        screened.redactedCount ||
+        screened.omittedCount
+      ) {
+        throw new ProviderError(
+          409,
+          "AI_EVIDENCE_UNSAFE",
+          "Outbound evidence requires review.",
+        );
+      }
+    } else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === "object")
+      Object.entries(value).forEach(([key, part]) => {
+        visit(key);
+        visit(part);
+      });
+  };
+  try {
+    const body = JSON.parse(serialized) as {
+      messages?: { role: string; content: string }[];
+      contents?: { parts: { text: string }[] }[];
+      system?: string;
+      systemInstruction?: unknown;
+    };
+    const inspect = (content: string) => {
+      if (content.startsWith("{") && content.includes('"evidence"')) {
+        visit(JSON.parse(content));
+      } else visit(content);
+    };
+    // Serialized model request fields contain the exact JSON user message; parse its
+    // bounded evidence separately so the 4096-character scanner limit is per field.
+    if (body.messages)
+      for (const message of body.messages)
+        if (typeof message.content === "string") inspect(message.content);
+    if (body.contents)
+      for (const entry of body.contents)
+        for (const part of entry.parts) inspect(part.text);
+    if (typeof body.system === "string") visit(body.system);
+    if (body.systemInstruction) visit(body.systemInstruction);
+    const {
+      messages: _messages,
+      contents: _contents,
+      system: _system,
+      systemInstruction: _systemInstruction,
+      ...metadata
+    } = body;
+    void _messages;
+    void _contents;
+    void _system;
+    void _systemInstruction;
+    visit(metadata);
+  } catch (error) {
+    if (error instanceof ProviderError) throw error;
+    throw new ProviderError(
+      409,
+      "AI_EVIDENCE_UNSAFE",
+      "Outbound evidence requires review.",
+    );
+  }
+}
+
+/** POST a chat completion; return parsed JSON message content. Caller owns the AbortSignal. */
+export async function callProvider(
+  rawConfig: ProviderConfig,
+  messages: {
+    role: "system" | "user" | "assistant";
+    content: ProviderSafeText;
+  }[],
+  signal: AbortSignal,
+  purpose?: "test",
+  approvedPayload?: string,
+): Promise<unknown> {
+  const config = validateProviderConfig(rawConfig);
+  const serialized = serializeProviderRequest(config, messages, purpose);
+  if (approvedPayload !== undefined) assertScreenedPayload(serialized);
+  if (approvedPayload !== undefined && serialized !== approvedPayload)
+    throw new ProviderError(
+      409,
+      "AI_APPROVAL_INVALID",
+      "AI approval no longer matches outbound data.",
+    );
+  const result = await post(config, serialized, signal);
   // Never follow redirects or surface provider text: it may contain secrets or URLs.
   checkStatus(result.status);
   try {

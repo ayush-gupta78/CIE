@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request as httpRequest } from "node:http";
 import { afterEach, expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 import { mockedProvider } from "./aiTestProvider.fixture.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
@@ -112,15 +112,36 @@ it("times out an unresponsive provider, aborts its signal and releases the activ
 it("aborts the provider after a real HTTP client disconnect", async () => {
   const context = await setup();
   try {
+    const paired = await context.req("POST", "/api/v1/auth/pair", {
+      secret: "synthetic-owner-pairing-fixture",
+    });
     const hang = deferred();
     vi.stubGlobal("fetch", hang.fetcher);
+    const prepared = await context.req(
+      "POST",
+      "/api/v1/ai/preview",
+      context.body,
+    );
+    expect(prepared.statusCode).toBe(200);
     const address = await context.app.listen({ host: "127.0.0.1", port: 0 });
-    const client = httpRequest(`${address}/api/v1/ai/ask`, {
+    const client = httpRequest(`${address}/api/v1/ai/approve`, {
       method: "POST",
-      headers: { ...headers, "content-type": "application/json" },
+      headers: {
+        ...headers,
+        "content-type": "application/json",
+        cookie: (paired.headers["set-cookie"] as string).split(";", 1)[0],
+        "x-cie-csrf": paired.json().csrf,
+      },
     });
     client.on("error", () => {});
-    client.end(JSON.stringify(context.body));
+    client.end(
+      JSON.stringify({
+        id: prepared.json().id,
+        repositoryId: context.body.repositoryId,
+        revision: context.body.revision,
+        manifest: context.body.manifest,
+      }),
+    );
     await hang.whenStarted;
     client.destroy();
     await vi.waitFor(() => expect(hang.aborted).toBe(true), { timeout: 2000 });

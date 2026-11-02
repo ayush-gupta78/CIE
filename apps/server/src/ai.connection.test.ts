@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 const headers = { host: "127.0.0.1:3001", origin: "http://127.0.0.1:5173" };
 it("requires a verified connection before an answer and isolates provider switches", async () => {

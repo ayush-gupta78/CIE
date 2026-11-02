@@ -57,6 +57,10 @@ export class ApiError extends Error {
     super(message);
   }
 }
+let csrf = "";
+export function setCsrf(value: string) {
+  csrf = value;
+}
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const selection = (value: unknown): value is Selection =>
@@ -90,7 +94,16 @@ export async function request(
 ): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(url, { cache: "no-store", ...init });
+    response = await fetch(url, {
+      cache: "no-store",
+      ...init,
+      headers:
+        csrf &&
+        init?.method &&
+        !["GET", "HEAD"].includes(init.method.toUpperCase())
+          ? { ...init.headers, "X-CIE-CSRF": csrf }
+          : init?.headers,
+    });
   } catch (error) {
     if (init?.signal?.aborted) throw error;
     throw new ApiError(
@@ -112,6 +125,8 @@ export async function request(
       object(data) && object(data.error) && typeof data.error.code === "string"
         ? data.error.code
         : "UNAVAILABLE";
+    if (response.status === 401 && code === "AUTH_REQUIRED")
+      window.dispatchEvent(new Event("cie-auth-required"));
     throw new ApiError(
       code,
       messages[code] ?? "Local request failed. Retry shortly.",

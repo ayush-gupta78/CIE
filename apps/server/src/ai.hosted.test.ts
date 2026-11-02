@@ -8,7 +8,7 @@ import {
   discoverModels,
   validateProviderConfig,
 } from "./aiProvider.js";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 vi.mock("node:dns/promises", async (original) => ({
   ...(await original()),

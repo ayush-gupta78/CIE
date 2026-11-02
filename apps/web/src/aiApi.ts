@@ -54,6 +54,24 @@ export type AiAnswer = {
   provider: string;
   model: string;
 };
+export type AiPreview = {
+  id: string;
+  payload: string;
+  snapshot: {
+    repositoryId: string;
+    revision: number;
+    manifest: string;
+    fileId?: string;
+  };
+  destination: {
+    endpoint: string;
+    protocol: string;
+    model: string;
+    providerName: string;
+  };
+  expiresAt: number;
+  warnings: string[];
+};
 const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === "string" && v.length > 0;
@@ -191,14 +209,14 @@ export async function testAiConfig(signal?: AbortSignal): Promise<unknown> {
   if (!record(result) || result.ok !== true) throw invalid();
   return result;
 }
-export async function askAi(
+export async function previewAi(
   graph: Graph,
   question: string,
   fileId?: string,
   signal?: AbortSignal,
-): Promise<AiAnswer> {
+): Promise<AiPreview> {
   const result = await request(
-    "/api/v1/ai/ask",
+    "/api/v1/ai/preview",
     json(
       "POST",
       {
@@ -207,6 +225,45 @@ export async function askAi(
         manifest: graph.manifest,
         question,
         ...(fileId ? { fileId } : {}),
+      },
+      signal,
+    ),
+  );
+  if (
+    !record(result) ||
+    !text(result.id) ||
+    typeof result.payload !== "string" ||
+    !record(result.snapshot) ||
+    result.snapshot.repositoryId !== graph.repositoryId ||
+    result.snapshot.revision !== graph.revision ||
+    result.snapshot.manifest !== graph.manifest ||
+    result.snapshot.fileId !== fileId ||
+    !record(result.destination) ||
+    !endpoint(result.destination.endpoint) ||
+    !text(result.destination.protocol) ||
+    !text(result.destination.model) ||
+    !text(result.destination.providerName) ||
+    !Number.isSafeInteger(result.expiresAt) ||
+    !Array.isArray(result.warnings) ||
+    !result.warnings.every((warning: unknown) => typeof warning === "string")
+  )
+    throw invalid();
+  return result as AiPreview;
+}
+export async function approveAi(
+  graph: Graph,
+  id: string,
+  signal?: AbortSignal,
+): Promise<AiAnswer> {
+  const result = await request(
+    "/api/v1/ai/approve",
+    json(
+      "POST",
+      {
+        id,
+        repositoryId: graph.repositoryId,
+        revision: graph.revision,
+        manifest: graph.manifest,
       },
       signal,
     ),

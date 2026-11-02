@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  askAi,
+  approveAi,
   getAiConfig,
+  previewAi,
   verifiedCitation,
   type AiAnswer,
   type AiCitation,
   type AiConfig,
+  type AiPreview,
 } from "./aiApi";
 import { getGraph, type FileNode, type Graph } from "./graphApi";
 import { getSource } from "./sourceApi";
@@ -30,6 +32,11 @@ export function Assistant({
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<{
+    data: AiPreview;
+    question: string;
+    fileId?: string;
+  } | null>(null);
   const [checking, setChecking] = useState(false);
   const [current, setCurrent] = useState(true);
   const pending = useRef<AbortController | null>(null);
@@ -43,6 +50,7 @@ export function Assistant({
     verification.current?.abort();
     setTurns([]);
     setError("");
+    setPreview(null);
     setBusy(false);
     setCurrent(true);
     return () => {
@@ -54,6 +62,7 @@ export function Assistant({
   useEffect(() => {
     if (connection !== "connected") {
       setConfig(null);
+      setPreview(null);
       pending.current?.abort();
       setBusy(false);
       return;
@@ -83,6 +92,7 @@ export function Assistant({
       verification.current = next;
       pending.current?.abort();
       pending.current = null;
+      setPreview(null);
       setBusy(false);
       setCurrent(false);
       setChecking(true);
@@ -171,16 +181,58 @@ export function Assistant({
         setError("Graph changed. Reload the atlas before asking again.");
         return;
       }
-      const result = await askAi(
+      const data = await previewAi(
         graph,
         question.trim(),
         selected?.id,
         controller.signal,
       );
+      if (!controller.signal.aborted)
+        setPreview({ data, question: question.trim(), fileId: selected?.id });
+    } catch (issue) {
+      if (!controller.signal.aborted)
+        setError(
+          issue instanceof Error ? issue.message : "Assistant unavailable.",
+        );
+    } finally {
+      if (pending.current === controller) {
+        pending.current = null;
+        setBusy(false);
+      }
+    }
+  }
+  async function approve() {
+    if (
+      !graph ||
+      !preview ||
+      busy ||
+      !current ||
+      checking ||
+      connection !== "connected" ||
+      question.trim() !== preview.question ||
+      selected?.id !== preview.fileId ||
+      Date.now() > preview.data.expiresAt ||
+      !config?.enabled ||
+      !config.consent ||
+      config.connectionStatus !== "verified"
+    )
+      return;
+    const approved = preview;
+    setPreview(null);
+    const controller = new AbortController();
+    pending.current = controller;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await approveAi(
+        graph,
+        approved.data.id,
+        controller.signal,
+      );
       if (!controller.signal.aborted) {
         setTurns((previous) => [
           ...previous,
-          { question: question.trim(), result },
+          { question: approved.question, result },
         ]);
         setQuestion("");
       }
@@ -404,7 +456,10 @@ export function Assistant({
           value={question}
           maxLength={2000}
           rows={3}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            setPreview(null);
+          }}
           placeholder="What does this file depend on?"
         />
         <div>
@@ -440,6 +495,52 @@ export function Assistant({
           )}
         </div>
       </form>
+      {preview && (
+        <section aria-label="Outbound evidence preview">
+          <h3>Review exact outbound request body</h3>
+          <p>
+            Destination: {preview.data.destination.endpoint} ·{" "}
+            {preview.data.destination.protocol} ·{" "}
+            {preview.data.destination.model}
+          </p>
+          <p>
+            Snapshot: {preview.data.snapshot.repositoryId} · revision{" "}
+            {preview.data.snapshot.revision} · {preview.data.snapshot.manifest}
+            {preview.data.snapshot.fileId
+              ? ` · ${preview.data.snapshot.fileId}`
+              : ""}
+          </p>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              overflowWrap: "anywhere",
+              maxHeight: "20rem",
+              overflow: "auto",
+            }}
+          >
+            {preview.data.payload}
+          </pre>
+          {preview.data.warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+          <button
+            type="button"
+            disabled={
+              busy ||
+              checking ||
+              !current ||
+              connection !== "connected" ||
+              Date.now() > preview.data.expiresAt
+            }
+            onClick={() => void approve()}
+          >
+            Approve and send this payload
+          </button>
+          <button type="button" onClick={() => setPreview(null)}>
+            Discard preview
+          </button>
+        </section>
+      )}
       {checking && <p role="status">Verifying graph and source…</p>}
       {error && <p role="alert">{error}</p>}
     </section>

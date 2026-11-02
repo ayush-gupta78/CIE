@@ -6,7 +6,7 @@ import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "./testApp.js";
 
 vi.mock("node:dns/promises", async (original) => ({
   ...(await original()),
@@ -154,7 +154,7 @@ it.each([
         question: "Explain ordinary evidence",
       };
       const result = await req("POST", "/api/v1/ai/ask", ask);
-      expect(result.statusCode).toBe(200);
+      expect(result.statusCode, result.json().error?.code).toBe(200);
       expect(bodies).toHaveLength(2);
       const serialized = bodies[1];
       for (const secret of [

@@ -83,7 +83,7 @@ async function pinnedAddress(
 
 export async function post(
   config: ProviderConfig,
-  body: object,
+  body: object | string,
   signal: AbortSignal,
   discovery?: { pageToken?: string },
 ): Promise<{ status: number; text: string }> {
@@ -190,6 +190,12 @@ export async function post(
     );
     req.on("error", () => reject(unavailable()));
     req.setTimeout(12000, () => req.destroy());
-    req.end(discovery ? undefined : JSON.stringify(body));
+    req.end(
+      discovery
+        ? undefined
+        : typeof body === "string"
+          ? body
+          : JSON.stringify(body),
+    );
   });
 }
